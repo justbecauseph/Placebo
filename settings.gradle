@@ -1,5 +1,21 @@
+pluginManagement {
+    repositories {
+        maven { url "https://maven.fabricmc.net/" }
+        maven { url "https://maven.architectury.dev/" }
+        maven { url "https://maven.neoforged.net/releases/" }
+        gradlePluginPortal()
+    }
+}
 
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
 }
 
+// Phase 2a: the Architectury split ships NeoForge only. The fabric subproject arrives in Phase 2b --
+// see porting/CHECKLIST.md in the Apotheosis repo. Adding it is `include("fabric")` here plus
+// `platforms=fabric,neoforge` in gradle.properties.
+include("common")
+include("fabric")
+include("neoforge")
+
+rootProject.name = "Placebo"

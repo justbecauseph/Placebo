@@ -1,360 +1,109 @@
 plugins {
-    id 'java-library'
-    id 'maven-publish'
-    id 'net.neoforged.moddev' version '2.0.141'
-    id 'com.diffplug.eclipse.apt' version '3.42.2'
-    id 'me.modmuss50.mod-publish-plugin' version '2.0.0'
-    id 'eclipse'
+    id "architectury-plugin" version "3.5-SNAPSHOT"
+    // Minecraft 26.2 ships deobfuscated: Mojang no longer publishes client_mappings and Fabric
+    // intermediary stops at 1.21.11. The no-remap Loom variant is the one that accepts an empty
+    // 'mappings' configuration -- what architectury-api and figura-port both use at 26.2.
+    // Two consequences, both of which fail confusingly if forgotten:
+    //   * there are no mod* configurations (no modImplementation / modApi) -- nothing is remapped
+    //   * :common exposes no namedElements variant -- depend on the plain project
+    id "dev.architectury.loom-no-remap" version "1.17-SNAPSHOT" apply false
+    id "maven-publish"
 }
 
-base {
-    archivesName = "${fileName}-${mcVersion}"
+architectury {
+    minecraft = rootProject.mcVersion
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(project.properties.javaVersion)
+subprojects {
+    apply plugin: "dev.architectury.loom-no-remap"
 
-// Forward declaration of generateModMetadata for use in the neoForge block. Definition is below.
-var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {}
-
-neoForge {
-    version = project.properties.forgeVersion
-
-    mods {
-        create(project.name) {
-            sourceSet project.sourceSets.main
-        }
+    loom {
+        silentMojangMappingsLicense()
     }
 
-    runs {
-        configureEach {
-            logLevel = org.slf4j.event.Level.DEBUG
-            taskBefore generateModMetadata
-        }
+    dependencies {
+        // No `mappings` line: 26.2 is deobfuscated, so there is nothing to map.
+        minecraft "com.mojang:minecraft:${rootProject.mcVersion}"
 
-        client {
-            client()
-            systemProperty 'forge.enabledGameTestNamespaces', "${modid}"
-            ideName = "${project.name} - Client"
-        }
-
-        server {
-            server()
-            systemProperty 'forge.enabledGameTestNamespaces', "${modid}"
-            programArgument '--nogui'
-            ideName = "${project.name} - Server"
-        }
-
-        data {
-            clientData()
-            programArguments.addAll '--mod', "${modid}", '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
-            ideName = "${project.name} - Data"
-        }
-    }
-
-    ideSyncTask generateModMetadata
-
-    neoFormRuntime {
-        useEclipseCompiler = false // Allows for parallelism on recompile - disabled due to a bug.
-    }
-}
-
-repositories {
-    maven {
-        // CurseForge
-        url "https://www.cursemaven.com"
-        content {
-            includeGroup "curse.maven"
-        }
-    }
-    maven {
-        // Curios
-        url "https://maven.theillusivec4.top"
-        content {
-            includeGroupByRegex "top\\.theillusivec4.*"
-        }
-    }
-    maven {
-        // The One Probe
-        url "https://maven.k-4u.nl"
-        content {
-            includeGroup "mcjty.theoneprobe"
-        }
-    }
-    maven {
-        // Patchouli
-        url "https://maven.blamejared.com"
-        content {
-            includeGroup "vazkii.patchouli"
-            includeGroupByRegex "net\\.darkhax.*"
-            includeGroupByRegex "com\\.blamejared.*"
-            includeGroup "org.openzen.zencode"
-            includeGroup "mezz.jei"
-        }
-    }
-    maven {
-        // Shadows
-        url "https://maven.shadowsoffire.dev/releases"
-        content {
-            includeGroup "dev.shadowsoffire"
-            includeGroup "snownee.jade"
+        if (rootProject.mixin.toBoolean()) {
+            annotationProcessor "org.spongepowered:mixin:${rootProject.mixinVersion}:processor"
         }
     }
 }
 
-configurations {
-    compileClasspath.extendsFrom localImplementation
-    runtimeClasspath.extendsFrom localImplementation
-    runtimeClasspath.extendsFrom localRuntime
-}
+allprojects {
+    apply plugin: "java"
+    apply plugin: "architectury-plugin"
+    apply plugin: "maven-publish"
 
-dependencies {
-    if (project.mixin.toBoolean())                   annotationProcessor "org.spongepowered:mixin:${mixinVersion}:processor"
-    if (project.hasProperty('placeboVersion'))       implementation      "dev.shadowsoffire:Placebo:${mcVersion}-${placeboVersion}"
-    if (project.hasProperty('jeiVersion'))           localImplementation "mezz.jei:jei-${mcVersion}-neoforge:${jeiVersion}"
-    if (project.hasProperty('jadeVersion'))          localImplementation "snownee.jade:Jade-NeoForge:${mcVersion}-${jadeVersion}"
-    if (project.hasProperty('curiosVersion'))        implementation      "top.theillusivec4.curios:curios-neoforge:${curiosVersion}"
-    if (project.hasProperty('patchouliVersion'))     implementation      "vazkii.patchouli:Patchouli:${patchouliVersion}"
-    if (project.hasProperty('bookshelfVersion'))     localImplementation "net.darkhax.bookshelf:Bookshelf-Forge-${mcVersion}:${bookshelfVersion}"
-    if (project.hasProperty('gamestagesVersion'))    localImplementation "net.darkhax.gamestages:GameStages-Forge-${mcVersion}:${gamestagesVersion}"
-    if (project.hasProperty('twilightFileId'))       localImplementation "curse.maven:the-twilight-forest-227639:${twilightFileId}"
-    if (project.hasProperty('gatewaysVersion'))      localImplementation "dev.shadowsoffire:GatewaysToEternity:${mcVersion}-${gatewaysVersion}"
-    if (project.hasProperty('attributeslibVersion')) implementation      "dev.shadowsoffire:ApothicAttributes:${mcVersion}-${attributeslibVersion}"
-}
-
-tasks.named("generateModMetadata") {
-    inputs.dir('src/templates')
-
-    def mixinPath = "${project.projectDir}/src/main/java/${modGroup}/${modid}/mixin".replaceAll('\\.', '/')
-
-    if (file(mixinPath).exists()) {
-        inputs.dir(mixinPath)
+    base {
+        archivesName = "${rootProject.fileName}-${rootProject.mcVersion}"
     }
 
-    def replaceProperties = [
-        modGroup: modGroup,
-        modid: modid,
-        version: version,
-        modName: modName,
-        author: author,
-        desc: desc,
-        mcVersion: mcVersion,
-        javaVersion: javaVersion,
-        forgeVersion: forgeVersion
-    ]
+    group = rootProject.modGroup
+    version = rootProject.version
 
-    def licenseFile = file('LICENSE')
-    if (!licenseFile.exists()) {
-        throw new Exception('Missing LICENSE file in repository root.')
-    }
-    replaceProperties.put 'license', file('LICENSE').readLines().get(0)
-
-    if (project.hasProperty('placeboVersion'))       replaceProperties.put 'placeboVersion', placeboVersion
-    if (project.hasProperty('attributeslibVersion')) replaceProperties.put 'attributeslibVersion', attributeslibVersion
-    if (project.hasProperty('curiosVersion'))        replaceProperties.put 'curiosVersion', curiosVersion
-    if (project.hasProperty('topVersion'))           replaceProperties.put 'topVersion', topVersion
-    if (project.hasProperty('patchouliVersion'))     replaceProperties.put 'patchouliVersion', patchouliVersion
-
-    replaceProperties.put 'mixinConfig', project.mixin.toBoolean() ? "[[mixins]]\nconfig=\"${modid}.mixins.json\"" : ""
-
-    inputs.properties replaceProperties
-
-    from("src/templates")
-    into("src/generated/resources")
-
-    filesMatching('neoforge.mods.toml') {
-        expand replaceProperties
-        name 'META-INF/neoforge.mods.toml'
-    }
-
-    // Automatically populate mixins.json from the mixin package and rename to modid.mixins.json
-    filesMatching('mixins.json') {
-        def mixinFiles = []
-        def clientMixinFiles = []
-
-        fileTree(mixinPath).visit { FileVisitDetails details ->
-            def name = details.file.path.replace('\\', '/')
-            name = name.substring(name.indexOf('mixin/') + 'mixin/'.length(), name.length())
-            if(name.endsWith('.java')) {
-                name = name.substring(0, name.length() - '.java'.length())
-                if(name.startsWith('client')) {
-                    clientMixinFiles.add(name)
-                } else {
-                    mixinFiles.add(name)
-                }
-            }
-        }
-
-        def mixins = ''
-        def clientMixins = ''
-
-        for (int i = 0; i < mixinFiles.size(); i++) {
-            def name = mixinFiles[i]
-            name = name.replaceAll('\\/', '.')
-            mixins += '        "' + name + '"'
-            if (i != mixinFiles.size() - 1) {
-                mixins += ',\n'
-            }
-        }
-
-        for (int i = 0; i < clientMixinFiles.size(); i++) {
-            def name = clientMixinFiles[i]
-            name = name.replaceAll('\\/', '.')
-            clientMixins += '        "' + name + '"'
-            if (i != clientMixinFiles.size() - 1) {
-                clientMixins += ',\n'
-            }
-        }
-
-        replaceProperties.put('mixins', mixins)
-        replaceProperties.put('clientMixins', clientMixins)
-
-        expand replaceProperties
-        name "${modid}.mixins.json".toString()
-    }
-}
-
-tasks.named('processResources') {
-    dependsOn generateModMetadata
-}
-
-tasks.withType(Jar) {
-    dependsOn generateModMetadata
-}
-
-sourceSets.main.resources {
-    srcDir 'src/generated/resources'
-}
-
-// Declare an additional sourceset so un-expanded template files are visible in the IDE.
-sourceSets {
-    templates {
-        resources {
-            srcDir 'src/templates'
-        }
-    }
-}
-
-if (!project.enableTests.toBoolean()) {
-    sourceSets.remove(sourceSets.test)
-}
-
-tasks.named('jar', Jar).configure {
-    manifest {
-        attributes([
-            "Specification-Title": project.fileName,
-            "Specification-Vendor": project.author,
-            "Specification-Version": project.version,
-            "Implementation-Title": project.fileName,
-            "Implementation-Version": project.version,
-            "Implementation-Vendor" : project.author,
-            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
-        ])
-    }
-}
-
-java {
-    withSourcesJar()
-}
-
-publishing {
     repositories {
+        mavenLocal()
         maven {
-            name = "shadowsMaven"
-            url = "https://maven.shadowsoffire.dev/releases"
-            credentials(PasswordCredentials)
-            authentication {
-                basic(BasicAuthentication)
+            // Architectury
+            url "https://maven.architectury.dev/"
+        }
+        maven {
+            // NeoForged -- supplies net.neoforged:neoforge for the :neoforge platform project.
+            url "https://maven.neoforged.net/releases/"
+        }
+        maven {
+            // CurseForge
+            url "https://www.cursemaven.com"
+            content {
+                includeGroup "curse.maven"
+            }
+        }
+        maven {
+            // Curios
+            url "https://maven.theillusivec4.top"
+            content {
+                includeGroupByRegex "top\\.theillusivec4.*"
+            }
+        }
+        maven {
+            // The One Probe
+            url "https://maven.k-4u.nl"
+            content {
+                includeGroup "mcjty.theoneprobe"
+            }
+        }
+        maven {
+            // Patchouli / JEI / Darkhax
+            url "https://maven.blamejared.com"
+            content {
+                includeGroup "vazkii.patchouli"
+                includeGroupByRegex "net\\.darkhax.*"
+                includeGroupByRegex "com\\.blamejared.*"
+                includeGroup "org.openzen.zencode"
+                includeGroup "mezz.jei"
+            }
+        }
+        maven {
+            // Shadows
+            url "https://maven.shadowsoffire.dev/releases"
+            content {
+                includeGroup "dev.shadowsoffire"
+                includeGroup "snownee.jade"
             }
         }
     }
-    publications {
-        mavenJava(MavenPublication) {
-            groupId = "${modGroup}"
-            artifactId = "${fileName}"
-            version = "${mcVersion}-${version}"
-            pom.withXml {
-                def node = asNode()
-                if(node.dependencies.size() > 0)
-                    node.remove(node.dependencies) // Remove deps, as they are all mappings-dependent and/or forge
-            }
-            from components.java
-        }
-    }
-}
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
-}
-
-def getChangelogLink = {
-    def repo = providers.exec {
-        commandLine = ["git", "config", "--get", "remote.origin.url"]
-    }.standardOutput.asText.get().trim()
-
-    def branch = providers.exec {
-        commandLine = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
-    }.standardOutput.asText.get().trim()
-
-    if (!repo.isBlank() && !branch.isBlank()) {
-        return repo.substring(0, repo.length() - 4) + '/blob/' + branch + '/changelog.md'
-    } else {
-        return ''
-    }
-}
-
-// Parses a comma-separated dependency list for one platform ('curseforge' or 'modrinth'). Each entry is
-// either "slug" (sent to both platforms) or "curseforgeSlug|modrinthSlug"; an empty side (e.g. "foo|" or
-// "|foo") limits that dependency to a single platform.
-def depsFor(String list, String platform) {
-    list.split(',').collect { it.trim() }.findAll { it }.collect { entry ->
-        def parts = entry.split('\\|', -1).collect { it.trim() }
-        parts.size() > 1 ? (platform == 'curseforge' ? parts[0] : parts[1]) : parts[0]
-    }.findAll { it }
-}
-
-// Applies CurseForge/Modrinth dependency relations from gradle.properties to the given platform options.
-def applyDeps = { options, String platform ->
-    if (project.hasProperty('requiredDeps'))     depsFor(project.requiredDeps, platform).each     { options.requires(it) }
-    if (project.hasProperty('optionalDeps'))     depsFor(project.optionalDeps, platform).each     { options.optional(it) }
-    if (project.hasProperty('incompatibleDeps')) depsFor(project.incompatibleDeps, platform).each { options.incompatible(it) }
-}
-
-publishMods {
-    file = jar.archiveFile
-    additionalFiles.from(sourcesJar.archiveFile)
-    changelog = provider { getChangelogLink() }
-    version = "${mcVersion}-${project.version}".toString()
-    type = switch (project.releaseType) {
-        case 'release' -> STABLE
-        case 'beta'    -> BETA
-        case 'alpha'   -> ALPHA
-        default -> throw new GradleException("Unknown release type: ${project.releaseType}")
-    }
-    modLoaders.add("neoforge")
-
-    if (project.hasProperty('curseforgeUploadToken')) {
-        curseforge {
-            projectId = curseforgeProjectId
-            accessToken = providers.gradleProperty('curseforgeUploadToken')
-            minecraftVersions.add(mcVersion)
-            javaVersions.add(JavaVersion.toVersion(javaVersion))
-            client = true
-            server = true
-            applyDeps(delegate, 'curseforge')
-        }
+    java {
+        toolchain.languageVersion = JavaLanguageVersion.of(rootProject.javaVersion)
+        withSourcesJar()
     }
 
-    if (project.hasProperty('modrinthUploadToken') && project.hasProperty('modrinthProjectId')) {
-        modrinth {
-            projectId = modrinthProjectId
-            accessToken = providers.gradleProperty('modrinthUploadToken')
-            minecraftVersions.add(mcVersion)
-            applyDeps(delegate, 'modrinth')
-        }
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = "UTF-8"
+        options.release = Integer.parseInt(rootProject.javaVersion)
+        // javac stops reporting after 100 errors; during a port the error count IS the progress metric.
+        options.compilerArgs << "-Xmaxerrs" << "2000"
     }
-}
-
-task publishAll() {
-    dependsOn 'publish'
-    dependsOn 'publishMods'
 }

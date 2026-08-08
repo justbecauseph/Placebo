@@ -1,0 +1,15 @@
+architectury {
+    common(rootProject.platforms.split(","))
+}
+
+dependencies {
+    // Fabric loader is on the compile classpath only for its @Environment annotations.
+    // Do NOT use any other class from it in common code.
+    implementation "net.fabricmc:fabric-loader:${rootProject.fabricLoaderVersion}"
+
+    api "dev.architectury:architectury:${rootProject.architecturyVersion}"
+
+    // javax.annotation.Nullable came transitively from the NeoForge dependency in the old single-project
+    // build. Common has no NeoForge on its classpath, so it must be declared explicitly.
+    compileOnly "com.google.code.findbugs:jsr305:3.0.2"
+}
