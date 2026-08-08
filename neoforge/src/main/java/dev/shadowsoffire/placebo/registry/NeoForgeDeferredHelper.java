@@ -255,12 +255,6 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
         return type;
     }
 
-    /**
-     * Registers a {@link CreativeModeTab} that is configured with the supplied operator.
-     */
-    public RegistrySupplier<CreativeModeTab> creativeTab(String path, UnaryOperator<CreativeModeTab.Builder> operator) {
-        return this.register(path, Registries.CREATIVE_MODE_TAB, () -> operator.apply(CreativeModeTab.builder()).build());
-    }
 
     /**
      * BE Types have an intrusive holder, so on top of {@link DeferredSet}, we also need to unfreeze the registry to construct them.

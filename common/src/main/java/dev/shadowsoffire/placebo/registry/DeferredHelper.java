@@ -478,6 +478,16 @@ public class DeferredHelper {
     }
 
     /**
+     * Registers a {@link CreativeModeTab} that is configured with the supplied operator.
+     * <p>
+     * Uses the vanilla two-arg builder. NeoForge's no-arg {@code builder()} is exactly
+     * {@code new Builder(Row.TOP, 0)}, so this is behaviour-identical and works on both loaders.
+     */
+    public RegistrySupplier<CreativeModeTab> creativeTab(String path, UnaryOperator<CreativeModeTab.Builder> operator) {
+        return this.register(path, Registries.CREATIVE_MODE_TAB, () -> operator.apply(CreativeModeTab.builder(CreativeModeTab.Row.TOP, 0)).build());
+    }
+
+    /**
      * Stages the supplier for registration, invoking {@code callback} once the object has been created.
      *
      * @return A supplier for the registered object. Unlike NeoForge's {@code DeferredHolder} this is only

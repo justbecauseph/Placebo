@@ -59,6 +59,7 @@ shadowJar {
 
 assemble.dependsOn shadowJar
 
+
 sourcesJar {
     def commonSources = project(":common").tasks.named("sourcesJar")
     dependsOn commonSources
@@ -213,11 +214,17 @@ publishing {
             groupId = rootProject.modGroup
             artifactId = rootProject.fileName
             version = "${rootProject.mcVersion}-${project.version}"
+            // Publish the SHADOWED jar, not `from components.java`. With the shadow plugin the java
+            // component's apiElements/runtimeElements point at the raw NeoForge-only jar, so consumers
+            // resolve a Placebo without any of :common in it -- which fails at the first import of
+            // dev.shadowsoffire.placebo.codec or .dynreg.
+            artifact(tasks.named("shadowJar")) { classifier = null }
+            artifact(tasks.named("sourcesJar"))
+
             pom.withXml {
                 def node = asNode()
                 if (node.dependencies.size() > 0) node.remove(node.dependencies)
             }
-            from components.java
         }
     }
 }
