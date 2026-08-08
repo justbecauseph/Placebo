@@ -1,0 +1,34 @@
+accessWidener	v2	official
+
+# Ported from META-INF/accesstransformer.cfg. Under the Architectury/loom toolchain the access widener is
+# the compile-time source of truth for all subprojects; the NeoForge AT is kept for runtime.
+#
+# 26.2 note: the original AT also widened RecipeManager.byName and StateHolder.instance. Neither exists in
+# 26.2 -- an AT silently ignores stale entries, an access widener does not, so they are dropped here.
+
+accessible	field	net/minecraft/world/item/crafting/RecipeManager	recipes	Lnet/minecraft/world/item/crafting/RecipeMap;
+
+accessible	field	net/minecraft/world/level/storage/loot/LootPool$Builder	entries	Lcom/google/common/collect/ImmutableList$Builder;
+accessible	field	net/minecraft/world/level/storage/loot/LootPool$Builder	conditions	Lcom/google/common/collect/ImmutableList$Builder;
+accessible	field	net/minecraft/world/level/storage/loot/LootPool$Builder	functions	Lcom/google/common/collect/ImmutableList$Builder;
+
+accessible	field	net/minecraft/world/level/block/state/StateDefinition	owner	Ljava/lang/Object;
+mutable	field	net/minecraft/world/level/block/state/StateDefinition	owner	Ljava/lang/Object;
+
+# GradientColor extends TextColor, so the class must lose its final marker.
+extendable	class	net/minecraft/network/chat/TextColor
+accessible	class	net/minecraft/network/chat/TextColor
+accessible	field	net/minecraft/network/chat/TextColor	NAMED_COLORS	Ljava/util/Map;
+mutable	field	net/minecraft/network/chat/TextColor	NAMED_COLORS	Ljava/util/Map;
+accessible	method	net/minecraft/network/chat/TextColor	<init>	(ILjava/lang/String;)V
+
+accessible	method	net/minecraft/world/inventory/AbstractContainerMenu	updateDataSlotListeners	(II)V
+
+accessible	field	net/minecraft/world/item/alchemy/PotionBrewing	potionMixes	Ljava/util/List;
+mutable	field	net/minecraft/world/item/alchemy/PotionBrewing	potionMixes	Ljava/util/List;
+accessible	field	net/minecraft/world/item/alchemy/PotionBrewing	containerMixes	Ljava/util/List;
+mutable	field	net/minecraft/world/item/alchemy/PotionBrewing	containerMixes	Ljava/util/List;
+accessible	class	net/minecraft/world/item/alchemy/PotionBrewing$Mix
+
+accessible	field	net/minecraft/client/gui/screens/Screen	font	Lnet/minecraft/client/gui/Font;
+accessible	method	net/minecraft/world/item/alchemy/PotionBrewing$Mix	<init>	(Lnet/minecraft/core/Holder;Lnet/minecraft/world/item/crafting/Ingredient;Lnet/minecraft/core/Holder;)V

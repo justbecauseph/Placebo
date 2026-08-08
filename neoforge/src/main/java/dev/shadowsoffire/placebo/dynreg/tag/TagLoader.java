@@ -24,7 +24,7 @@ import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.tags.TagEntry;
 import net.minecraft.tags.TagFile;
 import net.minecraft.util.DependencySorter;
-import net.neoforged.neoforge.common.conditions.ConditionalOps;
+import dev.shadowsoffire.placebo.dynreg.ReloadContext;
 
 /**
  * Loads tag JSON files for a single {@link DynamicRegistry} and resolves them into a flat map of tag id → entry id list.
@@ -49,7 +49,7 @@ public final class TagLoader<R> {
      * Scans the datapack for tag files. Safe to call off-thread during {@code prepare} — does not depend on
      * registry content.
      */
-    public Map<Identifier, List<EntryWithSource>> scan(ResourceManager manager, ConditionalOps<JsonElement> ops) {
+    public Map<Identifier, List<EntryWithSource>> scan(ResourceManager manager, ReloadContext ctx) {
         Map<Identifier, List<EntryWithSource>> result = new HashMap<>();
         FileToIdConverter lister = FileToIdConverter.json(this.directory);
         for (Map.Entry<Identifier, List<Resource>> entry : lister.listMatchingResourceStacks(manager).entrySet()) {
@@ -58,7 +58,7 @@ public final class TagLoader<R> {
             for (Resource resource : entry.getValue()) {
                 try (Reader reader = resource.openAsReader()) {
                     JsonElement element = JsonParser.parseReader(reader);
-                    TagFile parsed = TagFile.CODEC.parse(new Dynamic<>(ops, element)).getOrThrow();
+                    TagFile parsed = TagFile.CODEC.parse(new Dynamic<>(ctx.ops(), element)).getOrThrow();
                     List<EntryWithSource> entries = result.computeIfAbsent(id, k -> new ArrayList<>());
                     if (parsed.replace()) {
                         entries.clear();

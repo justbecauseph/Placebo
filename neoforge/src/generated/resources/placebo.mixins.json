@@ -4,8 +4,9 @@
     "compatibilityLevel": "JAVA_25",
     "mixins": [
         "AnvilBlockMixin",
-        "DatagenModLoaderMixin",
+        "ContextAwareReloadListenerAccessor",
         "DataProviderMixin",
+        "DatagenModLoaderMixin",
         "HashCacheMixin",
         "ItemStackMixin"
     ],

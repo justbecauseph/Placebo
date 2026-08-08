@@ -5,8 +5,7 @@ import org.slf4j.Logger;
 import com.google.gson.JsonElement;
 
 import net.minecraft.resources.Identifier;
-import net.neoforged.neoforge.common.conditions.ConditionalOps;
-import net.neoforged.neoforge.common.conditions.ICondition;
+import dev.shadowsoffire.placebo.dynreg.ReloadContext;
 
 public class JsonUtil {
 
@@ -30,11 +29,11 @@ public class JsonUtil {
      * @param id      The ID of that json.
      * @param type    The type of the json, for logging.
      * @param logger  The logger to log to.
-     * @param context The context object used for resolving conditions.
+     * @param ctx     The reload context used for resolving conditions.
      * @return True if the item's conditions are met, false otherwise.
      */
-    public static boolean checkConditions(JsonElement e, Identifier id, Identifier regId, Logger logger, ConditionalOps<JsonElement> ops) {
-        if (ICondition.conditionsMatched(ops, e.getAsJsonObject())) {
+    public static boolean checkConditions(JsonElement e, Identifier id, Identifier regId, Logger logger, ReloadContext ctx) {
+        if (ctx.conditionsMatch(e.getAsJsonObject())) {
             return true;
         }
         logger.trace("Skipping loading {} item with id {} as it's conditions were not met", regId, id);

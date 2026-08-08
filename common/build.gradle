@@ -1,3 +1,7 @@
+loom {
+    accessWidenerPath = file("src/main/resources/placebo.accesswidener")
+}
+
 architectury {
     common(rootProject.platforms.split(","))
 }

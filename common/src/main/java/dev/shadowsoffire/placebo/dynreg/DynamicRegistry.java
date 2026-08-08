@@ -29,7 +29,6 @@ import com.mojang.serialization.Codec;
 
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicHolderSet;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagKey;
-import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import dev.shadowsoffire.placebo.json.JsonUtil;
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.CodecException;
@@ -43,11 +42,6 @@ import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.common.conditions.ConditionalOps;
-import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
-import net.neoforged.neoforge.event.OnDatapackSyncEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 /**
  * A Dynamic Registry is a reload listener which acts like a registry. Unlike datapack registries, it can reload.
@@ -177,13 +171,13 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     @Override
     protected final void apply(Map<Identifier, JsonElement> objects, ResourceManager pResourceManager, ProfilerFiller pProfiler) {
         this.beginReload(ReloadType.SERVER);
-        ConditionalOps<JsonElement> ops = this.makeConditionalOps();
+        ReloadContext ctx = DynRegPlatform.contextFor(this);
         Codec<R> codec = this.serializer.codec();
         objects.forEach((key, ele) -> {
             try {
-                if (JsonUtil.checkAndLogEmpty(ele, key, this.id, this.logger) && JsonUtil.checkConditions(ele, key, this.id, this.logger, ops)) {
+                if (JsonUtil.checkAndLogEmpty(ele, key, this.id, this.logger) && JsonUtil.checkConditions(ele, key, this.id, this.logger, ctx)) {
                     JsonObject obj = ele.getAsJsonObject();
-                    R deserialized = codec.decode(ops, obj).getOrThrow(this::makeCodecException).getFirst();
+                    R deserialized = codec.decode(ctx.ops(), obj).getOrThrow(this::makeCodecException).getFirst();
                     this.register(key, deserialized);
                 }
             }
@@ -271,7 +265,7 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
         if (this.serializer.isSynced()) {
             SyncManagement.registerForSync(this);
         }
-        NeoForge.EVENT_BUS.addListener(this::addReloader);
+        DynRegPlatform.registerReloadListener(this.id, this);
     }
 
     /**
@@ -457,10 +451,8 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
      * Also adds a dependency edge to {@link DynamicTagManager} so that tag loading runs after registry content has
      * been deserialized.
      */
-    private void addReloader(AddServerReloadListenersEvent e) {
-        e.addListener(this.id, this);
-        e.addDependency(this.id, DynamicTagManager.ID);
-    }
+    // Reload registration and its ordering edge (this listener must run before DynamicTagManager) are
+    // applied by the platform via DynRegPlatform.registerReloadListener.
 
     /**
      * Replaces the contents of the live registry with the staging registry.<br>
@@ -508,22 +500,19 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     }
 
     /**
-     * Sync event handler. Sends the start packet, a content packet for each item, a tag-sync packet
+     * Sync handler. Sends the start packet, a content packet for each item, a tag-sync packet
      * (if any tags are bound), and then the end packet.
      */
-    void sync(OnDatapackSyncEvent e) {
-        ServerPlayer player = e.getPlayer();
-        Consumer<CustomPacketPayload> target = player == null ? PacketDistributor::sendToAllPlayers : payload -> PacketDistributor.sendToPlayer(player, payload);
+    void sync(@Nullable ServerPlayer player) {
+        DynRegPlatform.SyncHandler target = DynRegPlatform.sync();
 
-        target.accept(new DynRegPayloads.Start(this.id));
-        this.registry.forEach((k, v) -> {
-            target.accept(new DynRegPayloads.Content<>(this.id, k, Either.left(v)));
-        });
+        target.start(player, this.id);
+        this.registry.forEach((k, v) -> target.content(player, this.id, k, v));
         Map<Identifier, List<Identifier>> exported = this.exportTags();
         if (!exported.isEmpty()) {
-            target.accept(new TagSyncPayload(this.id, exported));
+            target.tags(player, this.id, exported);
         }
-        target.accept(new DynRegPayloads.End(this.id));
+        target.end(player, this.id);
     }
 
     /**

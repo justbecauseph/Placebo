@@ -8,6 +8,7 @@ import dev.shadowsoffire.placebo.commands.PlaceboCommand;
 import dev.shadowsoffire.placebo.datagen.FieldOrderingFactory;
 import dev.shadowsoffire.placebo.datagen.RegisterFieldOrderingsEvent;
 import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
+import dev.shadowsoffire.placebo.dynreg.NeoForgeDynReg;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import dev.shadowsoffire.placebo.events.ResourceReloadEvent;
@@ -37,7 +38,9 @@ public class PlaceboNeoForge {
 
     public PlaceboNeoForge(IEventBus bus) {
         bus.register(this);
+        NeoForgeDynReg.install();
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
+        NeoForge.EVENT_BUS.addListener(NeoForgeDynReg::onDatapackSync);
         NeoForge.EVENT_BUS.addListener(this::serverReload);
         NeoForge.EVENT_BUS.addListener(this::serverStart);
         TextColor.NAMED_COLORS = new HashMap<>(TextColor.NAMED_COLORS);
@@ -71,6 +74,7 @@ public class PlaceboNeoForge {
     }
 
     public void serverReload(AddServerReloadListenersEvent e) {
+        NeoForgeDynReg.addReloadListeners(e);
         e.addListener(Placebo.loc("placebo_reload_event"), (ResourceManagerReloadListener) res -> NeoForge.EVENT_BUS.post(new ResourceReloadEvent(res, LogicalSide.SERVER)));
         e.addListener(DynamicTagManager.ID, DynamicTagManager.INSTANCE);
     }

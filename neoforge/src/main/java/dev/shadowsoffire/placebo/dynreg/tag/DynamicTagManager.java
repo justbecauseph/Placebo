@@ -12,7 +12,8 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
-import net.neoforged.neoforge.common.conditions.ConditionalOps;
+import dev.shadowsoffire.placebo.dynreg.DynRegPlatform;
+import dev.shadowsoffire.placebo.dynreg.ReloadContext;
 
 /**
  * Reload listener responsible for loading tag JSON files for every constructed {@link DynamicRegistry}.
@@ -34,17 +35,17 @@ public class DynamicTagManager extends SimplePreparableReloadListener<Map<Dynami
 
     @Override
     protected Map<DynamicRegistry<?>, ScannedTags<?>> prepare(ResourceManager manager, ProfilerFiller profiler) {
-        ConditionalOps<JsonElement> ops = this.makeConditionalOps();
+        ReloadContext ctx = DynRegPlatform.contextFor(null);
         Map<DynamicRegistry<?>, ScannedTags<?>> result = new IdentityHashMap<>();
         for (DynamicRegistry<?> registry : DynamicRegistry.allRegistries().values()) {
-            result.put(registry, scanFor(registry, manager, ops));
+            result.put(registry, scanFor(registry, manager, ctx));
         }
         return result;
     }
 
-    private static <R> ScannedTags<R> scanFor(DynamicRegistry<R> registry, ResourceManager manager, ConditionalOps<JsonElement> ops) {
+    private static <R> ScannedTags<R> scanFor(DynamicRegistry<R> registry, ResourceManager manager, ReloadContext ctx) {
         TagLoader<R> loader = new TagLoader<>(registry, registry.getLogger());
-        return new ScannedTags<>(loader, loader.scan(manager, ops));
+        return new ScannedTags<>(loader, loader.scan(manager, ctx));
     }
 
     @Override

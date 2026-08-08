@@ -1,22 +1,12 @@
-plugins {
-    id "com.gradleup.shadow" version "9.4.3"
-}
-
+// Phase 2a scaffold only -- no Fabric mod code yet. This subproject exists so that :common is built for
+// the fabric platform too (platforms=fabric,neoforge), which keeps the common code honest: anything that
+// would not compile against a non-NeoForge target fails here rather than in Phase 2b.
 architectury {
     platformSetupLoomIde()
     fabric()
 }
 
-configurations {
-    common
-    shadowCommon
-    compileClasspath.extendsFrom common
-    runtimeClasspath.extendsFrom common
-    developmentFabric.extendsFrom common
-}
-
 dependencies {
     implementation "net.fabricmc:fabric-loader:${rootProject.fabricLoaderVersion}"
-    common(project(path: ":common")) { transitive false }
-    shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive false }
+    implementation project(path: ":common")
 }

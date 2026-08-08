@@ -7,13 +7,11 @@ import java.util.function.Consumer;
 
 import org.jetbrains.annotations.ApiStatus;
 
+import dev.architectury.utils.GameInstance;
 import dev.shadowsoffire.placebo.Placebo;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.OnDatapackSyncEvent;
-import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 /**
  * Internal class for sync management.
@@ -37,9 +35,6 @@ class SyncManagement {
         synchronized (SYNC_REGISTRY) {
             if (SYNC_REGISTRY.containsKey(listener.id)) {
                 throw new UnsupportedOperationException("Attempted to register the JSON Reload Listener for syncing " + listener.id + " but one already exists!");
-            }
-            if (SYNC_REGISTRY.isEmpty()) {
-                NeoForge.EVENT_BUS.addListener(SyncManagement::syncAll);
             }
             SYNC_REGISTRY.put(listener.id, listener);
         }
@@ -126,7 +121,7 @@ class SyncManagement {
      * @implNote Only called on the logical client.
      */
     public static void endSync(Identifier id) {
-        if (ServerLifecycleHooks.getCurrentServer() != null) {
+        if (GameInstance.getServer() != null) {
             // On a singleplayer host, we have to re-register a copy of the original data instead of the synced data
             // since the synced data may not contain the "full" information from the server.
             ifPresent(id, DynamicRegistry::processIntegratedClientReload);
@@ -147,7 +142,12 @@ class SyncManagement {
         }
     }
 
-    private static void syncAll(OnDatapackSyncEvent e) {
-        SYNC_REGISTRY.values().forEach(r -> r.sync(e));
+    /**
+     * Syncs every registered registry to one player, or to all players when {@code player} is null.
+     * The platform entrypoint wires this to its datapack-sync event: {@code OnDatapackSyncEvent} on
+     * NeoForge, {@code ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS} on Fabric.
+     */
+    public static void syncAll(@javax.annotation.Nullable net.minecraft.server.level.ServerPlayer player) {
+        SYNC_REGISTRY.values().forEach(r -> r.sync(player));
     }
 }
