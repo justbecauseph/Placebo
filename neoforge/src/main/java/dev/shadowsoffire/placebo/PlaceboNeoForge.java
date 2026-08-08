@@ -9,6 +9,8 @@ import dev.shadowsoffire.placebo.datagen.FieldOrderingFactory;
 import dev.shadowsoffire.placebo.datagen.RegisterFieldOrderingsEvent;
 import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.NeoForgeDynReg;
+import dev.shadowsoffire.placebo.registry.DeferredHelper;
+import dev.shadowsoffire.placebo.registry.NeoForgeDeferredHelper;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import dev.shadowsoffire.placebo.events.ResourceReloadEvent;
@@ -39,6 +41,7 @@ public class PlaceboNeoForge {
     public PlaceboNeoForge(IEventBus bus) {
         bus.register(this);
         NeoForgeDynReg.install();
+        DeferredHelper.setFactory(NeoForgeDeferredHelper::new);
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
         NeoForge.EVENT_BUS.addListener(NeoForgeDynReg::onDatapackSync);
         NeoForge.EVENT_BUS.addListener(this::serverReload);

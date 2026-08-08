@@ -1,0 +1,273 @@
+package dev.shadowsoffire.placebo.registry;
+
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
+
+import org.jetbrains.annotations.Nullable;
+
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
+
+import dev.architectury.registry.registries.RegistrySupplier;
+import dev.shadowsoffire.placebo.block_entity.TickingBlockEntity;
+import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType;
+import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType.TickSide;
+import dev.shadowsoffire.placebo.menu.MenuUtil;
+import net.minecraft.world.inventory.MenuType.MenuSupplier;
+import dev.shadowsoffire.placebo.menu.MenuUtil.PosFactory;
+import dev.shadowsoffire.placebo.util.DeferredSet;
+import net.minecraft.core.Holder;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.MenuType;
+import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeInput;
+import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.minecraft.world.level.block.entity.BlockEntityType.BlockEntitySupplier;
+import net.neoforged.neoforge.attachment.AttachmentType;
+import net.neoforged.neoforge.attachment.IAttachmentHolder;
+import net.neoforged.neoforge.common.crafting.ICustomIngredient;
+import net.neoforged.neoforge.common.crafting.IngredientType;
+import net.neoforged.neoforge.common.loot.IGlobalLootModifier;
+import net.neoforged.neoforge.network.IContainerFactory;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.common.NeoForgeMod;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
+import net.neoforged.neoforge.registries.NewRegistryEvent;
+import net.neoforged.neoforge.registries.RegistryBuilder;
+import net.neoforged.neoforge.registries.datamaps.DataMapType;
+import net.neoforged.neoforge.registries.datamaps.RegisterDataMapTypesEvent;
+
+/**
+ * NeoForge half of {@link DeferredHelper}.
+ * <p>
+ * Everything here depends on something NeoForge adds to vanilla and Fabric does not have:
+ * <ul>
+ * <li>attachments, custom ingredients, global loot modifiers, data maps, {@code IContainerFactory} menus,
+ * and {@code RegistryBuilder}-created registries -- NeoForge-only systems
+ * <li>{@code BlockEntityType#getValidBlocks}, {@code MappedRegistry#unfreeze},
+ * {@code RecipeType#simple(Identifier)} and the no-arg {@code CreativeModeTab#builder()} -- NeoForge
+ * additions to vanilla classes, invisible in imports
+ * </ul>
+ * Each is a Phase 2b design item rather than a rename.
+ */
+public class NeoForgeDeferredHelper extends DeferredHelper {
+
+    /**
+     * Fake registry key used only to build the data map's own ResourceKey. It does not point at a real
+     * registry -- NeoForge data maps are not registry entries.
+     */
+    private static final ResourceKey<Registry<DataMapType<?, ?>>> DATA_MAP_KEY =
+        ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(NeoForgeMod.MOD_ID, "data_map_type"));
+
+    /** Registries staged for the {@link NewRegistryEvent}. */
+    private final java.util.List<Registry<?>> pendingRegistries = new java.util.ArrayList<>();
+
+    /** Data map types staged for the {@link RegisterDataMapTypesEvent}. */
+    private final java.util.List<DataMapType<?, ?>> pendingDataMaps = new java.util.ArrayList<>();
+
+    public NeoForgeDeferredHelper(String modid) {
+        super(modid);
+    }
+
+    protected <T> void registerRegistry(ResourceKey<? extends Registry<T>> key, Registry<T> registry) {
+        this.pendingRegistries.add(registry);
+    }
+
+    protected <K, V> void registerDataMap(ResourceKey<? extends DataMapType<?, ?>> key, DataMapType<K, V> type) {
+        this.pendingDataMaps.add(type);
+    }
+
+    @SubscribeEvent
+    public void registerRegistries(NewRegistryEvent e) {
+        this.pendingRegistries.forEach(e::register);
+        this.pendingRegistries.clear();
+    }
+
+    @SubscribeEvent
+    public void registerDataMaps(RegisterDataMapTypesEvent e) {
+        this.pendingDataMaps.forEach(e::register);
+        this.pendingDataMaps.clear();
+    }
+
+    /**
+     * Creates and returns a {@link Registry} in the current {@link #modid} with the given {@code registryPath}.
+     * <p>
+     * The registry will be automatically registered to the root registry during the {@link NewRegistryEvent}.
+     *
+     * @param registryPath The path of the resource location for the new registry.
+     * @param config       A registry builder config.
+     * @return The newly created registry.
+     */
+    public <T> Registry<T> registry(String registryPath, UnaryOperator<RegistryBuilder<T>> config) {
+        ResourceKey<? extends Registry<T>> registryKey = ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(this.modid, registryPath));
+        Registry<T> registry = config.apply(new RegistryBuilder<>(registryKey)).create();
+        this.registerRegistry(registryKey, registry);
+        return registry;
+    }
+
+    /**
+     * Registers a {@link MenuType} for the provided {@link IContainerFactory}.
+     */
+    public <T extends AbstractContainerMenu> MenuType<T> menuWithData(String path, IContainerFactory<T> factory) {
+        return this.menuType(path, MenuUtil.bufType(factory));
+    }
+
+    /**
+     * Registers an {@link AttachmentType} with the specified default value, that is configured with the supplied operator.
+     * <p>
+     * Immediately constructs the {@link AttachmentType} and returns it. Registration is deferred until the appropriate time.
+     */
+    public <T> AttachmentType<T> attachment(String path, Supplier<T> defaultValue, UnaryOperator<AttachmentType.Builder<T>> operator) {
+        AttachmentType<T> type = operator.apply(AttachmentType.builder(defaultValue)).build();
+        this.register(path, NeoForgeRegistries.Keys.ATTACHMENT_TYPES, () -> type);
+        return type;
+    }
+
+    /**
+     * Registers an {@link AttachmentType} with the specified default value, that is configured with the supplied operator.
+     * <p>
+     * Immediately constructs the {@link AttachmentType} and returns it. Registration is deferred until the appropriate time.
+     */
+    public <T> AttachmentType<T> attachment(String path, Function<IAttachmentHolder, T> defaultValue, UnaryOperator<AttachmentType.Builder<T>> operator) {
+        AttachmentType<T> type = operator.apply(AttachmentType.builder(defaultValue)).build();
+        this.register(path, NeoForgeRegistries.Keys.ATTACHMENT_TYPES, () -> type);
+        return type;
+    }
+
+    /**
+     * Registers a codec for an {@link IGlobalLootModifier} and returns it.
+     */
+    public <T extends IGlobalLootModifier> MapCodec<T> lootModifier(String path, MapCodec<T> codec) {
+        this.register(path, NeoForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, () -> codec);
+        return codec;
+    }
+
+    /**
+     * Registers an {@link IngredientType} and returns it.
+     */
+    public <T extends ICustomIngredient> IngredientType<T> ingredient(String path, IngredientType<T> type) {
+        this.register(path, NeoForgeRegistries.Keys.INGREDIENT_TYPES, () -> type);
+        return type;
+    }
+
+    /**
+     * Creates and returns a {@link DataMapType} for the {@code targetRegistry}.
+     * <p>
+     * The data map type will be automatically registered during the {@link RegisterDataMapTypesEvent}.
+     *
+     * @param <K>            The key type of the data map, which is also the type of the target registry.
+     * @param <V>            The value type of the data map.
+     * @param path           The path of the resource location for the data map type. The map will always use the {@link #modid} as the namespace.
+     * @param targetRegistry The registry that the data map is for.
+     * @param codec          The codec used to de/serialize the data map objects.
+     * @param config         A builder config used to specify other values.
+     * @return The newly created data map type.
+     */
+    @SuppressWarnings("unchecked") // DataMapType has a bug in that it expects ResourceKey<Registry<K>> instead of ? extends Registry.
+    public <K, V> DataMapType<K, V> dataMap(String path, ResourceKey<? extends Registry<K>> targetRegistry, Codec<V> codec, UnaryOperator<DataMapType.Builder<V, K>> config) {
+        Identifier id = Identifier.fromNamespaceAndPath(this.modid, path);
+        ResourceKey<? extends DataMapType<?, ?>> registryKey = ResourceKey.create(DATA_MAP_KEY, id);
+        DataMapType<K, V> dataMapType = config.apply(DataMapType.builder(id, (ResourceKey<Registry<K>>) targetRegistry, codec)).build();
+        this.registerDataMap(registryKey, dataMapType);
+        return dataMapType;
+    }
+
+    /**
+     * Registers a {@link MenuType} for the provided {@link MenuSupplier}.
+     */
+    public <T extends AbstractContainerMenu> MenuType<T> menu(String path, MenuSupplier<T> factory) {
+        return this.menuType(path, MenuUtil.type(factory));
+    }
+
+    /**
+     * Registers a {@link MenuType} for the provided {@link PosFactory}.
+     */
+    public <T extends AbstractContainerMenu> MenuType<T> menuWithPos(String path, PosFactory<T> factory) {
+        return this.menuType(path, MenuUtil.posType(factory));
+    }
+
+
+    /**
+     * Registers a {@link BlockEntityType} given the {@link BlockEntitySupplier} and a supplier to the set of valid blocks.
+     */
+    public <T extends BlockEntity> RegistrySupplier<BlockEntityType<T>> blockEntity(String path, BlockEntitySupplier<T> factory, Supplier<Set<Block>> validBlocks) {
+        return this.register(path, Registries.BLOCK_ENTITY_TYPE, () -> new BlockEntityType<T>(factory, validBlocks.get()));
+    }
+
+    /**
+     * Registers a {@link BlockEntityType} given the {@link BlockEntitySupplier} and a vararg array of valid blocks.
+     * <p>
+     * Immediately constructs the {@link BlockEntityType} and returns it. Registration is deferred until the appropriate time. The set of valid blocks will not
+     * attempt to be resolved until registration.
+     */
+    @SafeVarargs
+    public final <T extends BlockEntity> BlockEntityType<T> blockEntity(String path, BlockEntitySupplier<T> factory, Holder<Block>... validBlocks) {
+        unfreezeBETypeRegistry();
+        BlockEntityType<T> type = new BlockEntityType<>(factory, new DeferredSet<>(() -> Arrays.stream(validBlocks).map(Holder::value).collect(Collectors.toSet())));
+        this.register(path, Registries.BLOCK_ENTITY_TYPE, () -> {
+            type.getValidBlocks(); // Force resolution of the DeferredSet during registration
+            return type;
+        });
+        return type;
+    }
+
+    /**
+     * Registers a {@link TickingBlockEntityType} for a {@link TickingBlockEntity} given the {@link BlockEntitySupplier}, the target {@link TickSide}, and a vararg
+     * array of valid blocks.
+     * <p>
+     * Immediately constructs the {@link BlockEntityType} and returns it. Registration is deferred until the appropriate time. The set of valid blocks will not
+     * attempt to be resolved until registration.
+     */
+    @SafeVarargs
+    public final <T extends BlockEntity & TickingBlockEntity> TickingBlockEntityType<T> tickingBlockEntity(String path, BlockEntitySupplier<T> factory, TickSide side, Holder<Block>... validBlocks) {
+        unfreezeBETypeRegistry();
+        TickingBlockEntityType<T> type = new TickingBlockEntityType<>(factory, new DeferredSet<>(() -> Arrays.stream(validBlocks).map(Holder::value).collect(Collectors.toSet())), side);
+        this.register(path, Registries.BLOCK_ENTITY_TYPE, () -> {
+            type.getValidBlocks(); // Force resolution of the DeferredSet during registration
+            return type;
+        });
+        return type;
+    }
+
+    /**
+     * Registers a {@link RecipeType} using {@link RecipeType#simple(Identifier)}.
+     * <p>
+     * Immediately constructs the {@link RecipeType} and returns it. Registration is deferred until the appropriate time.
+     */
+    public <C extends RecipeInput, U extends Recipe<C>> RecipeType<U> recipe(String path) {
+        RecipeType<U> type = RecipeType.simple(Identifier.fromNamespaceAndPath(this.modid, path));
+        this.recipe(path, () -> type);
+        return type;
+    }
+
+    /**
+     * Registers a {@link CreativeModeTab} that is configured with the supplied operator.
+     */
+    public RegistrySupplier<CreativeModeTab> creativeTab(String path, UnaryOperator<CreativeModeTab.Builder> operator) {
+        return this.register(path, Registries.CREATIVE_MODE_TAB, () -> operator.apply(CreativeModeTab.builder()).build());
+    }
+
+    /**
+     * BE Types have an intrusive holder, so on top of {@link DeferredSet}, we also need to unfreeze the registry to construct them.
+     */
+    @SuppressWarnings("deprecation")
+    private static void unfreezeBETypeRegistry() {
+        ((MappedRegistry<BlockEntityType<?>>) BuiltInRegistries.BLOCK_ENTITY_TYPE).unfreeze(false);
+    }
+
+}
