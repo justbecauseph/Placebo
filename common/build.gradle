@@ -12,4 +12,8 @@ dependencies {
     // javax.annotation.Nullable came transitively from the NeoForge dependency in the old single-project
     // build. Common has no NeoForge on its classpath, so it must be declared explicitly.
     compileOnly "com.google.code.findbugs:jsr305:3.0.2"
+    // Guava's optional annotations (@WeakOuter, @LazyInit, ...). Placebo's AbstractBiMap is derived from
+    // Guava and uses them; they arrived transitively via NeoForge in the old single-project build.
+    compileOnly "com.google.errorprone:error_prone_annotations:2.36.0"
+    compileOnly "com.google.j2objc:j2objc-annotations:3.0.0"
 }

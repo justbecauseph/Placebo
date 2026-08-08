@@ -13,7 +13,7 @@ import com.mojang.serialization.JsonOps;
 
 import dev.shadowsoffire.placebo.codec.CodecProvider;
 import net.minecraft.resources.Identifier;
-import net.neoforged.fml.loading.FMLPaths;
+import dev.architectury.platform.Platform;
 
 /**
  * Code that allows for datagen of files at runtime.
@@ -73,7 +73,7 @@ public class RuntimeDatagenHelpers {
      * @throws IllegalStateException if the disk write fails
      */
     public static void write(JsonElement json, String type, Identifier key) {
-        File file = new File(FMLPaths.GAMEDIR.get().toFile(), "datagen/" + key.getNamespace() + "/" + type + "/" + key.getPath() + ".json");
+        File file = new File(Platform.getGameFolder().toFile(), "datagen/" + key.getNamespace() + "/" + type + "/" + key.getPath() + ".json");
         file.getParentFile().mkdirs();
         try (FileWriter writer = new FileWriter(file)) {
             JsonWriter jWriter = new JsonWriter(writer);

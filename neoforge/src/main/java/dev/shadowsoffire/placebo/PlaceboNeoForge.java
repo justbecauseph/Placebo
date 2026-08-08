@@ -2,8 +2,6 @@ package dev.shadowsoffire.placebo;
 
 import java.util.HashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import dev.shadowsoffire.placebo.color.GradientColor;
 import dev.shadowsoffire.placebo.commands.PlaceboCommand;
@@ -35,12 +33,9 @@ import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 
 @Mod(Placebo.MODID)
 @SuppressWarnings("deprecation")
-public class Placebo {
+public class PlaceboNeoForge {
 
-    public static final String MODID = "placebo";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MODID);
-
-    public Placebo(IEventBus bus) {
+    public PlaceboNeoForge(IEventBus bus) {
         bus.register(this);
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
         NeoForge.EVENT_BUS.addListener(this::serverReload);
@@ -76,16 +71,12 @@ public class Placebo {
     }
 
     public void serverReload(AddServerReloadListenersEvent e) {
-        e.addListener(loc("placebo_reload_event"), (ResourceManagerReloadListener) res -> NeoForge.EVENT_BUS.post(new ResourceReloadEvent(res, LogicalSide.SERVER)));
+        e.addListener(Placebo.loc("placebo_reload_event"), (ResourceManagerReloadListener) res -> NeoForge.EVENT_BUS.post(new ResourceReloadEvent(res, LogicalSide.SERVER)));
         e.addListener(DynamicTagManager.ID, DynamicTagManager.INSTANCE);
     }
 
     public void serverStart(ServerAboutToStartEvent e) {
         MixRegistry.applyMixes();
-    }
-
-    public static Identifier loc(String path) {
-        return Identifier.fromNamespaceAndPath(MODID, path);
     }
 
 }
