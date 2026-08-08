@@ -4,12 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.lang3.mutable.MutableFloat;
-import org.joml.Matrix4f;
+
+import com.mojang.blaze3d.vertex.PoseStack;
 
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.Font.DisplayMode;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.OrderedSubmitNodeCollector;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
@@ -100,22 +101,32 @@ public class TickableTextList {
     }
 
     /**
-     * Renders all visible lines of text from this list.
+     * Submits all visible lines of text from this list to the level render pipeline.
+     * <p>
+     * This is the in-world (non-GUI) render path. For GUI rendering, use {@link #render(GuiGraphicsExtractor, float, float, int, boolean)}.
      * <p>
      * The parameters are the same as
-     * {@link Font#drawInBatch(FormattedCharSequence, float, float, int, boolean, Matrix4f, MultiBufferSource, DisplayMode, int, int)}.
-     * 
-     * @deprecated Use the GuiGraphicsExtractor variant to support deferred rendering.
+     * {@link OrderedSubmitNodeCollector#submitText(PoseStack, float, float, FormattedCharSequence, boolean, DisplayMode, int, int, int, int)},
+     * with an outline color of zero.
      */
-    @Deprecated
-    public void render(float x, float y, int color, boolean dropShadow, Matrix4f matrix, MultiBufferSource buffer, Font.DisplayMode mode, int bgColor, int packedLight) {
+    public void render(OrderedSubmitNodeCollector collector, PoseStack pose, float x, float y, int color, boolean dropShadow, Font.DisplayMode mode, int bgColor, int packedLight) {
+        this.render(collector, pose, x, y, color, dropShadow, mode, bgColor, packedLight, 0);
+    }
+
+    /**
+     * Submits all visible lines of text from this list to the level render pipeline.
+     *
+     * @see #render(OrderedSubmitNodeCollector, PoseStack, float, float, int, boolean, DisplayMode, int, int)
+     */
+    public void render(OrderedSubmitNodeCollector collector, PoseStack pose, float x, float y, int color, boolean dropShadow, Font.DisplayMode mode, int bgColor, int packedLight,
+        int outlineColor) {
         int line = 0;
         MutableFloat timeLeft = new MutableFloat(this.ticks);
 
         for (TickableText tickable : this.texts) {
             for (FormattedCharSequence seq : this.font.split(tickable.text, this.maxWidth)) {
                 seq = wrap(seq, tickable.tickRate, timeLeft);
-                this.font.drawInBatch(seq, x, y + this.lineSpacing * line, color, dropShadow, matrix, buffer, mode, bgColor, packedLight);
+                collector.submitText(pose, x, y + this.lineSpacing * line, seq, dropShadow, mode, packedLight, color, bgColor, outlineColor);
                 line++;
             }
         }

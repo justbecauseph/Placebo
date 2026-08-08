@@ -27,7 +27,7 @@ import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType.TickSide;
 import dev.shadowsoffire.placebo.menu.MenuUtil;
 import dev.shadowsoffire.placebo.menu.MenuUtil.PosFactory;
 import dev.shadowsoffire.placebo.util.DeferredSet;
-import net.minecraft.advancements.CriterionTrigger;
+import net.minecraft.advancements.triggers.CriterionTrigger;
 import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
@@ -72,7 +72,6 @@ import net.minecraft.world.level.block.entity.BlockEntityType.BlockEntitySupplie
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessor;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessorType;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.storage.loot.entries.LootPoolEntryContainer;
 import net.minecraft.world.level.storage.loot.predicates.LootItemCondition;
@@ -564,12 +563,14 @@ public class DeferredHelper {
     }
 
     /**
-     * Registers a {@link StructureProcessorType} and returns it.
+     * Registers a {@link StructureProcessor} codec and returns it.
+     * <p>
+     * As of MC 26.2, {@link Registries#STRUCTURE_PROCESSOR} holds {@link MapCodec MapCodecs} directly instead of
+     * {@code StructureProcessorType} instances, and {@link StructureProcessor#codec()} replaced {@code getType()}.
      */
-    public <T extends StructureProcessor> StructureProcessorType<T> structureProcessor(String path, MapCodec<T> codec) {
-        StructureProcessorType<T> type = () -> codec;
-        this.register(path, Registries.STRUCTURE_PROCESSOR, () -> type);
-        return type;
+    public <T extends StructureProcessor> MapCodec<T> structureProcessor(String path, MapCodec<T> codec) {
+        this.register(path, Registries.STRUCTURE_PROCESSOR, () -> codec);
+        return codec;
     }
 
     /**

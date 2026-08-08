@@ -35,18 +35,18 @@ public class PatreonPreview {
                         PatreonParticleType[] arr = PatreonParticleType.values();
                         PatreonParticleType p = arr[counter++ % arr.length];
                         Component type = Component.literal(WordUtils.capitalize(p.name().toLowerCase(Locale.ROOT).replace('_', ' ')));
-                        mc.gui.setTimes(0, 40, 20);
-                        mc.gui.setSubtitle(type);
-                        mc.gui.setTitle(Component.literal(""));
+                        mc.gui.hud.setTimes(0, 40, 20);
+                        mc.gui.hud.setSubtitle(type);
+                        mc.gui.hud.setTitle(Component.literal(""));
                         TrailsManager.TRAILS.put(player.getUUID(), p);
                     }
                     else if (WINGS) {
                         WingType[] arr = WingType.values();
                         WingType p = arr[counter++ % arr.length];
                         Component type = Component.literal(WordUtils.capitalize(p.name().toLowerCase(Locale.ROOT).replace('_', ' ')));
-                        mc.gui.setTimes(0, 40, 20);
-                        mc.gui.setSubtitle(type);
-                        mc.gui.setTitle(Component.literal(""));
+                        mc.gui.hud.setTimes(0, 40, 20);
+                        mc.gui.hud.setSubtitle(type);
+                        mc.gui.hud.setTitle(Component.literal(""));
                         WingsManager.WINGS.put(player.getUUID(), p);
                     }
                 }

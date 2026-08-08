@@ -1,3 +1,12 @@
+## 11.0.0
+* Ported to Minecraft 26.2.
+* **Breaking:** `DeferredHelper#structureProcessor` now returns `MapCodec<T>` instead of `StructureProcessorType<T>`.
+  * In 26.2, `Registries.STRUCTURE_PROCESSOR` holds `MapCodec<? extends StructureProcessor>` directly, and `StructureProcessor#getType()` was replaced by `StructureProcessor#codec()`.
+* **Breaking:** `TickableTextList#render(float, float, int, boolean, Matrix4f, MultiBufferSource, Font.DisplayMode, int, int)` was replaced by
+  `TickableTextList#render(OrderedSubmitNodeCollector, PoseStack, float, float, int, boolean, Font.DisplayMode, int, int)` (plus an overload taking an outline color).
+  * `MultiBufferSource` and `Font#drawInBatch` were removed from vanilla in 26.2; in-world text now goes through `OrderedSubmitNodeCollector#submitText`.
+  * The `GuiGraphicsExtractor` overloads are unchanged.
+
 ## 10.0.2
 * Added a generated-id mode to `RandomAttributeModifier`, available through `RandomAttributeModifier#generated` and the factory codecs `RandomAttributeModifier#generatedCodec` / `#constantGeneratedCodec`.
   * The forced-mandatory-IDs of 10.0.1 didn't really work out that well, so making generated IDs a first-class citizen will resolve the same issue.
