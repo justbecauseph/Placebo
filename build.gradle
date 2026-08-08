@@ -1,12 +1,15 @@
 plugins {
-    id "architectury-plugin" version "3.5-SNAPSHOT"
+    // Pinned, not "3.5-SNAPSHOT"/"1.17-SNAPSHOT". Those track the latest CI build and DO move:
+    // both 1.17.487 and 1.17.491 were resolved under the same snapshot coordinate during this port.
+    // Across a six-repo stack that means repos can silently build against different Loom versions.
+    id "architectury-plugin" version "3.5.169"
     // Minecraft 26.2 ships deobfuscated: Mojang no longer publishes client_mappings and Fabric
     // intermediary stops at 1.21.11. The no-remap Loom variant is the one that accepts an empty
     // 'mappings' configuration -- what architectury-api and figura-port both use at 26.2.
     // Two consequences, both of which fail confusingly if forgotten:
     //   * there are no mod* configurations (no modImplementation / modApi) -- nothing is remapped
     //   * :common exposes no namedElements variant -- depend on the plain project
-    id "dev.architectury.loom-no-remap" version "1.17-SNAPSHOT" apply false
+    id "dev.architectury.loom-no-remap" version "1.17.491" apply false
     id "maven-publish"
 }
 
