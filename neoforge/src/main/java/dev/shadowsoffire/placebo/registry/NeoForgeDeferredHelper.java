@@ -217,8 +217,30 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
      */
     @SafeVarargs
     public final <T extends BlockEntity> BlockEntityType<T> blockEntity(String path, BlockEntitySupplier<T> factory, Holder<Block>... validBlocks) {
+        return this.eagerBlockEntity(path, factory, () -> Arrays.stream(validBlocks).map(Holder::value).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Registers a {@link BlockEntityType} given the {@link BlockEntitySupplier} and a vararg array of block suppliers.
+     * <p>
+     * Prefer this over the {@link Holder} vararg form for your own blocks: {@code asHolder()} returns null until
+     * registration has run, and these calls sit in static initializers, so the holder captured here would be null
+     * and would NPE when the valid-block set resolves. Taking the suppliers defers that entirely.
+     */
+    @SafeVarargs
+    public final <T extends BlockEntity> BlockEntityType<T> blockEntity(String path, BlockEntitySupplier<T> factory, Supplier<? extends Block>... validBlocks) {
+        return this.eagerBlockEntity(path, factory, () -> Arrays.stream(validBlocks).map(Supplier::get).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Shared implementation for the vararg {@code blockEntity} overloads.
+     * <p>
+     * Immediately constructs the {@link BlockEntityType} and returns it. Registration is deferred until the appropriate
+     * time. The set of valid blocks will not attempt to be resolved until registration.
+     */
+    private <T extends BlockEntity> BlockEntityType<T> eagerBlockEntity(String path, BlockEntitySupplier<T> factory, Supplier<Set<Block>> validBlocks) {
         unfreezeBETypeRegistry();
-        BlockEntityType<T> type = new BlockEntityType<>(factory, new DeferredSet<>(() -> Arrays.stream(validBlocks).map(Holder::value).collect(Collectors.toSet())));
+        BlockEntityType<T> type = new BlockEntityType<>(factory, new DeferredSet<>(validBlocks));
         this.register(path, Registries.BLOCK_ENTITY_TYPE, () -> {
             type.getValidBlocks(); // Force resolution of the DeferredSet during registration
             return type;

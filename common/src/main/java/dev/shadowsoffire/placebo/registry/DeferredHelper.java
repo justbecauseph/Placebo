@@ -198,6 +198,41 @@ public class DeferredHelper {
         return blockItem(path, block, UnaryOperator.identity());
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // Supplier-based blockItem overloads.
+    //
+    // Prefer these when the target block is one of your own registrations. A RegistrySupplier resolves
+    // asHolder() through the registrar, which returns null until registration has run -- so calling it
+    // in the static initializer that declares your block items bakes in a null and NPEs later, at the
+    // point the item is actually built. Taking the supplier itself defers the whole question.
+    //
+    // Holder does not extend Supplier, so these do not collide with the Holder overloads above; keep
+    // those for vanilla blocks, which are already registered.
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Registers a subclass of {@link BlockItem} given a target block supplier, the constructor, and an
+     * {@link Item.Properties} factory.
+     */
+    public <T extends BlockItem> RegistrySupplier<T> blockItem(String path, Supplier<? extends Block> block, BiFunction<Block, Item.Properties, T> ctor, UnaryOperator<Item.Properties> properties) {
+        ResourceKey<Item> key = ResourceKey.create(Registries.ITEM, Identifier.fromNamespaceAndPath(this.modid, path));
+        return item(path, () -> ctor.apply(block.get(), properties.apply(new Item.Properties().useBlockDescriptionPrefix()).setId(key)));
+    }
+
+    /**
+     * Registers a {@link BlockItem} given a target block supplier and an {@link Item.Properties} factory.
+     */
+    public RegistrySupplier<BlockItem> blockItem(String path, Supplier<? extends Block> block, UnaryOperator<Item.Properties> properties) {
+        return blockItem(path, block, BlockItem::new, properties);
+    }
+
+    /**
+     * Registers a {@link BlockItem} given a target block supplier, using a default {@link Item.Properties} instance.
+     */
+    public RegistrySupplier<BlockItem> blockItem(String path, Supplier<? extends Block> block) {
+        return blockItem(path, block, UnaryOperator.identity());
+    }
+
     /**
      * Registers a {@link MobEffect} using a supplier.
      */
