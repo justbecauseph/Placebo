@@ -1,0 +1,65 @@
+# Builds the mod and uploads the jar so it can be downloaded from the Actions run.
+#
+# Jars are renamed to <Mod>-<mcVersion>-<version>+<short sha> so a download is traceable to
+# the exact commit. The build's own version is left alone -- changing it would change the
+# maven coordinates the rest of the stack resolves by.
+#
+# Nothing here publishes anywhere. Artifacts live on the workflow run only.
+name: Build
+
+on:
+  push:
+    branches: [ "26.2-architectury" ]
+  pull_request:
+    branches: [ "26.2-architectury" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build
+        run: |
+          chmod +x gradlew
+          ./gradlew build --no-daemon
+
+      - name: Stage jars with commit hash
+        id: stage
+        run: |
+          short="${GITHUB_SHA::7}"
+          mkdir -p ci-artifacts
+          # `-raw` is the shadow plugin's pre-merge jar and `-sources` is not a runnable mod;
+          # shipping either would just invite someone to install the wrong one.
+          for jar in neoforge/build/libs/*.jar; do
+            [ -e "$jar" ] || continue
+            case "$jar" in *-raw.jar|*-sources.jar) continue ;; esac
+            base=$(basename "$jar" .jar)
+            cp "$jar" "ci-artifacts/${base}+${short}.jar"
+          done
+          ls -l ci-artifacts
+          primary=$(find ci-artifacts -name '*.jar' | sort | head -1)
+          test -n "$primary" || { echo "::error::no jars were produced"; exit 1; }
+          echo "name=$(basename "$primary" .jar)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload jars
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.stage.outputs.name }}
+          path: ci-artifacts/*.jar
+          if-no-files-found: error
