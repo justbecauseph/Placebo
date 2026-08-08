@@ -200,6 +200,13 @@ loom {
     }
 }
 
+// Publish POM-only. The shadow plugin contributes apiElements/runtimeElements variants that point at
+// the RAW (NeoForge-only) jar, and Gradle prefers .module metadata over the POM -- so a consumer
+// silently resolves a Placebo containing none of :common. Naming shadowJar as the publication artifact
+// is not enough on its own; the bad variants still get written. Killing module metadata makes the POM
+// authoritative, and its main artifact is the shadowed jar.
+tasks.withType(GenerateModuleMetadata).configureEach { enabled = false }
+
 publishing {
     repositories {
         maven {
