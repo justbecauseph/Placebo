@@ -46,16 +46,21 @@ jobs:
           mkdir -p ci-artifacts
           # `-raw` is the shadow plugin's pre-merge jar and `-sources` is not a runnable mod;
           # shipping either would just invite someone to install the wrong one.
-          for jar in neoforge/build/libs/*.jar; do
-            [ -e "$jar" ] || continue
-            case "$jar" in *-raw.jar|*-sources.jar) continue ;; esac
-            base=$(basename "$jar" .jar)
-            cp "$jar" "ci-artifacts/${base}+${short}.jar"
+          # Both loaders emit the same file name, so the loader has to go into the staged name --
+          # without it the second copy silently overwrites the first and only one loader ever ships.
+          for loader in neoforge fabric; do
+            for jar in "$loader"/build/libs/*.jar; do
+              [ -e "$jar" ] || continue
+              case "$jar" in *-raw.jar|*-sources.jar) continue ;; esac
+              base=$(basename "$jar" .jar)
+              cp "$jar" "ci-artifacts/${base}-${loader}+${short}.jar"
+            done
           done
           ls -l ci-artifacts
           primary=$(find ci-artifacts -name '*.jar' | sort | head -1)
           test -n "$primary" || { echo "::error::no jars were produced"; exit 1; }
-          echo "name=$(basename "$primary" .jar)" >> "$GITHUB_OUTPUT"
+          # The zip holds both loaders, so its name should not claim one of them.
+          echo "name=$(basename "$primary" .jar | sed -E 's/-(neoforge|fabric)\+/+/')" >> "$GITHUB_OUTPUT"
 
       - name: Upload jars
         uses: actions/upload-artifact@v5
