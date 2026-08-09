@@ -26,6 +26,8 @@ import dev.shadowsoffire.placebo.systems.mixes.MixRegistry;
 import dev.shadowsoffire.placebo.tabs.NeoForgeTabFillContext;
 import dev.shadowsoffire.placebo.tabs.TabFillingRegistry;
 import dev.shadowsoffire.placebo.util.FakePlayerHelper;
+import dev.shadowsoffire.placebo.util.MobSpawnHelper;
+import dev.shadowsoffire.placebo.util.NeoForgeMobSpawnHelper;
 import dev.shadowsoffire.placebo.util.NeoForgeFakePlayerHelper;
 import dev.shadowsoffire.placebo.util.PlaceboUtil;
 import net.minecraft.network.chat.TextColor;
@@ -59,6 +61,7 @@ public class PlaceboNeoForge {
         bus.register(new NeoForgePayloadRegistrar());
         PayloadSender.setImpl(new NeoForgePayloadSender());
         FakePlayerHelper.setImpl(new NeoForgeFakePlayerHelper());
+        MobSpawnHelper.setImpl(new NeoForgeMobSpawnHelper());
         PlaceboConfig.load();
     }
 
