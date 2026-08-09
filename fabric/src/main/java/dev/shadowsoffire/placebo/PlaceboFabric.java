@@ -17,6 +17,8 @@ import dev.shadowsoffire.placebo.systems.gear.GearSetRegistry;
 import dev.shadowsoffire.placebo.tabs.FabricTabFillContext;
 import dev.shadowsoffire.placebo.util.FabricFakePlayerHelper;
 import dev.shadowsoffire.placebo.util.FabricMobSpawnHelper;
+import dev.shadowsoffire.placebo.util.FabricPersistentData;
+import dev.shadowsoffire.placebo.util.PersistentData;
 import dev.shadowsoffire.placebo.util.FakePlayerHelper;
 import dev.shadowsoffire.placebo.util.MobSpawnHelper;
 import net.fabricmc.api.ModInitializer;
@@ -85,6 +87,7 @@ public class PlaceboFabric implements ModInitializer {
         PayloadSender.setImpl(new FabricPayloadSender());
         FakePlayerHelper.setImpl(new FabricFakePlayerHelper());
         MobSpawnHelper.setImpl(new FabricMobSpawnHelper());
+        PersistentData.setImpl(new FabricPersistentData());
 
         Placebo.LOGGER.info("Placebo (Fabric) initialized.");
     }
