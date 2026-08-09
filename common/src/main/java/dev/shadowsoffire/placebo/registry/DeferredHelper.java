@@ -125,6 +125,43 @@ public class DeferredHelper {
     }
 
     /**
+     * Creates a mod-defined {@link Registry} in this helper's namespace, and registers it with the loader.
+     */
+    public <T> Registry<T> registry(String path, UnaryOperator<RegistrySpec<T>> config) {
+        ResourceKey<Registry<T>> key = ResourceKey.createRegistryKey(
+            Identifier.fromNamespaceAndPath(this.modid, path));
+        return REGISTRY_FACTORY.create(this, key, config);
+    }
+
+    /**
+     * Platform factory for {@link #registry}.
+     */
+    private static RegistryFactory REGISTRY_FACTORY = new RegistryFactory() {
+
+        @Override
+        public <T> Registry<T> create(DeferredHelper owner, ResourceKey<Registry<T>> key,
+            UnaryOperator<RegistrySpec<T>> config) {
+            throw new IllegalStateException("No registry factory installed; the platform entrypoint must call "
+                + "DeferredHelper.setRegistryFactory before any registry is declared.");
+        }
+    };
+
+    public static void setRegistryFactory(RegistryFactory factory) {
+        REGISTRY_FACTORY = java.util.Objects.requireNonNull(factory);
+    }
+
+    public interface RegistryFactory {
+
+        /**
+         * @param owner The helper the registry was declared on. NeoForge stages the registry there so it is
+         *              flushed by that helper's own {@code NewRegistryEvent} listener, rather than on
+         *              whichever instance happened to build the factory.
+         */
+        <T> Registry<T> create(DeferredHelper owner, ResourceKey<Registry<T>> key,
+            UnaryOperator<RegistrySpec<T>> config);
+    }
+
+    /**
      * Registers a {@link DataAttachment} with the given default value.
      * <p>
      * Common because both loaders have the concept and this stack only ever attaches to entities and block

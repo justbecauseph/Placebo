@@ -89,7 +89,7 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
         EventBusesHooks.whenAvailable(modid, bus -> bus.register(this));
     }
 
-    protected <T> void registerRegistry(ResourceKey<? extends Registry<T>> key, Registry<T> registry) {
+    <T> void registerRegistry(ResourceKey<? extends Registry<T>> key, Registry<T> registry) {
         this.pendingRegistries.add(registry);
     }
 
@@ -109,21 +109,6 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
         this.pendingDataMaps.clear();
     }
 
-    /**
-     * Creates and returns a {@link Registry} in the current {@link #modid} with the given {@code registryPath}.
-     * <p>
-     * The registry will be automatically registered to the root registry during the {@link NewRegistryEvent}.
-     *
-     * @param registryPath The path of the resource location for the new registry.
-     * @param config       A registry builder config.
-     * @return The newly created registry.
-     */
-    public <T> Registry<T> registry(String registryPath, UnaryOperator<RegistryBuilder<T>> config) {
-        ResourceKey<? extends Registry<T>> registryKey = ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(this.modid, registryPath));
-        Registry<T> registry = config.apply(new RegistryBuilder<>(registryKey)).create();
-        this.registerRegistry(registryKey, registry);
-        return registry;
-    }
 
     /**
      * Registers a {@link MenuType} for the provided {@link IContainerFactory}.
