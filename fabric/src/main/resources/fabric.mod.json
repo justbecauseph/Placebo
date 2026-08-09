@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "placebo",
+  "version": "${version}",
+  "name": "Placebo",
+  "description": "A library mod for Shadows_of_Fire's mods.",
+  "authors": [ "Shadows_of_Fire" ],
+  "license": "LGPL-3.0-only",
+  "environment": "*",
+  "entrypoints": {
+    "main": [ "dev.shadowsoffire.placebo.PlaceboFabric" ]
+  },
+  "accessWidener": "placebo.accesswidener",
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "fabric-api": "*",
+    "architectury": ">=21.0.0",
+    "minecraft": "~26.2"
+  }
+}
