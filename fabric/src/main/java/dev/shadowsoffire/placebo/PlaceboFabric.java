@@ -1,5 +1,6 @@
 package dev.shadowsoffire.placebo;
 
+import dev.shadowsoffire.placebo.dynreg.FabricDynReg;
 import dev.shadowsoffire.placebo.network.FabricPayloadRegistrar;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
@@ -14,11 +15,8 @@ import net.fabricmc.api.ModInitializer;
  * <table>
  * <tr><th>NeoForge does</th><th>Fabric status</th></tr>
  * <tr><td>{@code NeoForgeDynReg.install()}</td>
- * <td>Unblocked, not yet written. The networking prerequisite is done: payloads, {@code PayloadProvider} and
- * {@code PayloadHelper} are now in {@code :common}, and {@code FabricPayloadRegistrar} flushes them into
- * Fabric's API. What remains is {@code FabricDynReg} itself -- {@code ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS}
- * for sync, Architectury's {@code ReloadListenerRegistry} for listener registration, and a
- * {@code ReloadContext} whose {@code conditionsMatch} maps onto {@code fabric-resource-conditions-api-v1}.</td></tr>
+ * <td>Done -- see {@code FabricDynReg}. Dynamic tag <em>loading</em> is still missing (it needs NeoForge's
+ * {@code TagFile.remove()}); tag syncing works.</td></tr>
  * <tr><td>Command registration</td><td>Straightforward: {@code CommandRegistrationCallback}.</td></tr>
  * <tr><td>{@code TextColor.NAMED_COLORS} rewrite</td><td>Portable -- it is a vanilla field reached through the access widener.</td></tr>
  * <tr><td>{@code TabFillingRegistry::fillTabs}</td><td>Needs {@code ItemGroupEvents}.</td></tr>
@@ -36,6 +34,9 @@ public class PlaceboFabric implements ModInitializer {
     public void onInitialize() {
         // The base DeferredHelper is fully loader-neutral; only the 16 platform-only methods are missing here.
         DeferredHelper.setFactory(FabricDeferredHelper::new);
+
+        // Dynamic registries: install before payloads are flushed, since installing registers the sync hooks.
+        FabricDynReg.install();
 
         // Flush whatever payloads have been registered by now into Fabric's networking API. Mods register
         // during their own initializer, so this has to run after them -- see the note on ordering below.
