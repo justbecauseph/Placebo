@@ -194,8 +194,8 @@ loom {
             ideConfigGenerated true
             name = "NeoForge Data"
             programArgs '--mod', rootProject.modid, '--all',
-                '--output', file('src/generated/resources/').absolutePath,
-                '--existing', file('src/main/resources/').absolutePath
+                '--output', project(':common').file('src/generated/resources/').absolutePath,
+                '--existing', project(':common').file('src/main/resources/').absolutePath
         }
     }
 }
