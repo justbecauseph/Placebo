@@ -2,6 +2,7 @@ package dev.shadowsoffire.placebo;
 
 import java.util.HashMap;
 
+import dev.shadowsoffire.placebo.commands.PlaceboCommand;
 import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.FabricDynReg;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
@@ -10,7 +11,9 @@ import dev.shadowsoffire.placebo.network.PayloadHelper;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
 import dev.shadowsoffire.placebo.systems.gear.GearSetRegistry;
+import dev.shadowsoffire.placebo.tabs.FabricTabFillContext;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.network.chat.TextColor;
 
 /**
@@ -24,8 +27,6 @@ import net.minecraft.network.chat.TextColor;
  * <td>Both still live in {@code neoforge/}, on the menu and screen code that has no Fabric counterpart yet.
  * Not registered here, rather than half-registered.</td></tr>
  * <tr><td>{@code MixRegistry}</td><td>Platform-side: it reaches into {@code PotionBrewing} internals.</td></tr>
- * <tr><td>{@code TabFillingRegistry::fillTabs}</td><td>Needs {@code ItemGroupEvents}; the registry itself is also still platform-side.</td></tr>
- * <tr><td>Command registration</td><td>Needs {@code CommandRegistrationCallback}.</td></tr>
  * <tr><td>{@code GradientColor.RAINBOW}</td><td>Platform-side with the rest of the colour handling.</td></tr>
  * <tr><td>Dynamic tag <em>loading</em></td><td>Needs {@code TagFile.remove()}, a NeoForge added field. Tag <em>syncing</em> works.</td></tr>
  * </table>
@@ -61,6 +62,12 @@ public class PlaceboFabric implements ModInitializer {
 
         // Gear sets are a plain dynamic registry, so they work as soon as dynreg does.
         GearSetRegistry.INSTANCE.registerToBus();
+
+        // PlaceboCommand is already common and takes vanilla types, so this is a direct wire-up.
+        CommandRegistrationCallback.EVENT.register((dispatcher, ctx, env) -> PlaceboCommand.register(dispatcher, ctx));
+
+        // Creative tab filling. One global listener, so filler registration order does not matter.
+        FabricTabFillContext.install();
 
         // Flush everything registered so far into Fabric's networking API.
         FabricPayloadRegistrar.register();

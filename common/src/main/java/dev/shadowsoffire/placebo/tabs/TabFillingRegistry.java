@@ -13,7 +13,6 @@ import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.level.ItemLike;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 
 /**
  * Class for managing the new method of filling creative tabs,
@@ -101,8 +100,8 @@ public class TabFillingRegistry {
     }
 
     @ApiStatus.Internal
-    public static void fillTabs(BuildCreativeModeTabContentsEvent e) {
-        FILLERS.getOrDefault(e.getTabKey(), Collections.emptyList()).forEach(f -> f.fillItemCategory(e.getTab(), e));
+    public static void fillTabs(CreativeModeTab tab, TabFillContext ctx) {
+        FILLERS.getOrDefault(ctx.tabKey(), Collections.emptyList()).forEach(f -> f.fillItemCategory(tab, ctx));
     }
 
     private static void registerInternal(ResourceKey<CreativeModeTab> tab, ITabFiller filler) {

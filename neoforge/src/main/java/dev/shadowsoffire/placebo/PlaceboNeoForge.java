@@ -20,6 +20,7 @@ import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
 import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload;
 import dev.shadowsoffire.placebo.systems.gear.GearSetRegistry;
 import dev.shadowsoffire.placebo.systems.mixes.MixRegistry;
+import dev.shadowsoffire.placebo.tabs.NeoForgeTabFillContext;
 import dev.shadowsoffire.placebo.tabs.TabFillingRegistry;
 import dev.shadowsoffire.placebo.util.PlaceboUtil;
 import net.minecraft.network.chat.TextColor;
@@ -48,7 +49,7 @@ public class PlaceboNeoForge {
         NeoForge.EVENT_BUS.addListener(this::serverReload);
         NeoForge.EVENT_BUS.addListener(this::serverStart);
         TextColor.NAMED_COLORS = new HashMap<>(TextColor.NAMED_COLORS);
-        bus.addListener(TabFillingRegistry::fillTabs);
+        bus.addListener(NeoForgeTabFillContext::fillTabs);
         bus.register(new NeoForgePayloadRegistrar());
         PlaceboConfig.load();
     }
