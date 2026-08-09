@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8.7",
+  "package": "dev.shadowsoffire.placebo.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "injectors": { "defaultRequire": 1 },
+  "mixins": [
+    "LivingEntityHealMixin"
+  ],
+  "client": [],
+  "server": []
+}

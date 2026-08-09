@@ -14,6 +14,7 @@ import dev.shadowsoffire.placebo.registry.NeoForgeDeferredHelper;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import dev.shadowsoffire.placebo.events.ResourceReloadEvent;
+import dev.shadowsoffire.placebo.events.NeoForgeEventBridge;
 import dev.shadowsoffire.placebo.network.NeoForgePayloadRegistrar;
 import dev.shadowsoffire.placebo.network.PayloadHelper;
 import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
@@ -44,6 +45,7 @@ public class PlaceboNeoForge {
         bus.register(this);
         NeoForgeDynReg.install();
         DeferredHelper.setFactory(NeoForgeDeferredHelper::new);
+        NeoForge.EVENT_BUS.register(new NeoForgeEventBridge());
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
         NeoForge.EVENT_BUS.addListener(NeoForgeDynReg::onDatapackSync);
         NeoForge.EVENT_BUS.addListener(this::serverReload);
