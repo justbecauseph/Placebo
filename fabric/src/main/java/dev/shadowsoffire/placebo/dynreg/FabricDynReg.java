@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import org.jetbrains.annotations.Nullable;
 
 import dev.architectury.registry.ReloadListenerRegistry;
+import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -43,6 +44,9 @@ public final class FabricDynReg {
         ServerLifecycleEvents.SERVER_STOPPED.register(s -> server = null);
 
         ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> SyncManagement.syncAll(player));
+
+        // The tag manager is itself a reload listener, and must be registered like any other.
+        ReloadListenerRegistry.register(PackType.SERVER_DATA, DynamicTagManager.INSTANCE, DynamicTagManager.ID);
     }
 
     private static ReloadContext contextFor(@Nullable DynamicRegistry<?> registry) {
@@ -54,17 +58,11 @@ public final class FabricDynReg {
     }
 
     /**
-     * Registers the registry as a reload listener.
-     * <p>
-     * NeoForge additionally orders each registry before {@code DynamicTagManager} so that tag loading runs
-     * after registry content is deserialized. There is no ordering to declare here yet, because there is no
-     * Fabric tag manager: it depends on {@code TagFile.remove()}, which is a NeoForge <em>added field</em>
-     * that an access widener cannot supply. Tag <em>syncing</em> works -- {@link Sender#tags} sends the same
-     * payload -- but dynamic tag <em>loading</em> is still an open Phase 2b design item, and this call gains
-     * a dependency list the moment it exists.
+     * Registers the registry as a reload listener, ordered before the tag manager so tag loading runs after
+     * registry content has been deserialized -- the same ordering NeoForge gets from {@code addDependency}.
      */
     private static void registerReloadListener(Identifier id, DynamicRegistry<?> registry) {
-        ReloadListenerRegistry.register(PackType.SERVER_DATA, registry, id);
+        ReloadListenerRegistry.register(PackType.SERVER_DATA, registry, id, List.of(DynamicTagManager.ID));
     }
 
     private static class Sender implements DynRegPlatform.SyncHandler {

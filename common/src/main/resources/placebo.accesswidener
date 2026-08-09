@@ -36,3 +36,9 @@ accessible	method	net/minecraft/world/item/alchemy/PotionBrewing$Mix	<init>	(Lne
 # NeoForge widens these; common compiles against the un-patched jar and needs them explicitly.
 accessible	method	net/minecraft/core/particles/SimpleParticleType	<init>	(Z)V
 accessible	field	net/minecraft/world/level/block/entity/BlockEntityType	validBlocks	Ljava/util/Set;
+
+# TagEntry's id/tag are private in vanilla; NeoForge adds public getId()/isTag() accessors. A widener
+# cannot add those methods, but it CAN widen the fields they read -- which is all Placebo's tag loader
+# needs. This is what made dynamic tag loading loader-neutral; see dynreg/tag/TagFileData.
+accessible	field	net/minecraft/tags/TagEntry	id	Lnet/minecraft/resources/Identifier;
+accessible	field	net/minecraft/tags/TagEntry	tag	Z

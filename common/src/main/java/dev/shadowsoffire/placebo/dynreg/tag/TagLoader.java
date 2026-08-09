@@ -22,7 +22,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.tags.TagEntry;
-import net.minecraft.tags.TagFile;
 import net.minecraft.util.DependencySorter;
 import dev.shadowsoffire.placebo.dynreg.ReloadContext;
 
@@ -58,7 +57,7 @@ public final class TagLoader<R> {
             for (Resource resource : entry.getValue()) {
                 try (Reader reader = resource.openAsReader()) {
                     JsonElement element = JsonParser.parseReader(reader);
-                    TagFile parsed = TagFile.CODEC.parse(new Dynamic<>(ctx.ops(), element)).getOrThrow();
+                    TagFileData parsed = TagFileData.CODEC.parse(new Dynamic<>(ctx.ops(), element)).getOrThrow();
                     List<EntryWithSource> entries = result.computeIfAbsent(id, k -> new ArrayList<>());
                     if (parsed.replace()) {
                         entries.clear();
@@ -133,12 +132,12 @@ public final class TagLoader<R> {
          */
         boolean build(TagEntry.Lookup<Identifier> lookup, SequencedSet<Identifier> accumulator) {
             if (this.remove) {
-                if (this.entry.isTag()) {
-                    Collection<Identifier> contents = lookup.tag(this.entry.getId());
+                if (this.entry.tag) {
+                    Collection<Identifier> contents = lookup.tag(this.entry.id);
                     if (contents != null) contents.forEach(accumulator::remove);
                 }
                 else {
-                    accumulator.remove(this.entry.getId());
+                    accumulator.remove(this.entry.id);
                 }
                 return true;
             }
