@@ -26,6 +26,12 @@ dependencies {
 
     api "dev.architectury:architectury-fabric:${rootProject.architecturyVersion}"
 
+    // Already used by ten mixins across this stack, where NeoForge supplies it for free. Fabric ships it
+    // jar-in-jar inside the loader, so it is there at runtime but absent from the compile classpath --
+    // hence compileOnly, and deliberately not bundled.
+    compileOnly "io.github.llamalad7:mixinextras-common:${rootProject.mixinExtrasVersion}"
+    annotationProcessor "io.github.llamalad7:mixinextras-common:${rootProject.mixinExtrasVersion}"
+
     // loom-no-remap: :common has no namedElements variant -- nothing is mapped, so depend on the plain project.
     common(project(path: ":common")) { transitive false }
     shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive false }
@@ -63,6 +69,67 @@ processResources {
             "desc": rootProject.desc, "author": rootProject.author, "javaVersion": rootProject.javaVersion,
             "mcVersion": rootProject.mcVersion, "fabricLoaderVersion": rootProject.fabricLoaderVersion
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mixin config generation.
+//
+// The same scan neoforge/build.gradle does, over common + fabric instead of common + neoforge.
+//
+// This exists because the hand-written config drifted the moment it was written: it listed only the
+// mixins in fabric/ and silently omitted the two in common/, one of which (ItemStackMixin) supplies the
+// CachedObjectSource interface that the rest of the stack casts ItemStack to. Nothing catches that at
+// build time -- the classes are shadowed into the jar either way, they just never get applied.
+// Generating both configs from the source tree removes the drift rather than re-checking for it. (P2-A-7)
+// ---------------------------------------------------------------------------
+var generateFabricMixinConfig = tasks.register("generateFabricMixinConfig", ProcessResources) {
+    inputs.dir('src/templates')
+
+    def mixinRoots = [
+        file("${project(':common').projectDir}/src/main/java/dev/shadowsoffire/${rootProject.modid}/mixin"),
+        file("${project.projectDir}/src/main/java/dev/shadowsoffire/${rootProject.modid}/mixin")
+    ].findAll { it.exists() }
+
+    mixinRoots.each { inputs.dir(it) }
+
+    def replaceProperties = [
+        modGroup   : rootProject.modGroup,
+        modid      : rootProject.modid,
+        javaVersion: rootProject.javaVersion
+    ]
+    inputs.properties replaceProperties
+
+    from("src/templates")
+    into("src/generated/resources")
+
+    filesMatching('mixins.json') {
+        def mixinFiles = []
+        def clientMixinFiles = []
+
+        mixinRoots.each { root ->
+            fileTree(root).visit { FileVisitDetails details ->
+                def name = details.file.path.replace(File.separator, '/')
+                name = name.substring(name.indexOf('mixin/') + 'mixin/'.length())
+                if (name.endsWith('.java')) {
+                    name = name.substring(0, name.length() - '.java'.length()).replaceAll('/', '.')
+                    (name.startsWith('client') ? clientMixinFiles : mixinFiles).add(name)
+                }
+            }
+        }
+
+        replaceProperties.put('mixins', mixinFiles.sort().collect { '        "' + it + '"' }.join(',\n'))
+        replaceProperties.put('clientMixins', clientMixinFiles.sort().collect { '        "' + it + '"' }.join(',\n'))
+
+        expand replaceProperties
+        name "${rootProject.modid}-fabric.mixins.json".toString()
+    }
+}
+
+tasks.named('processResources') { dependsOn generateFabricMixinConfig }
+tasks.withType(Jar).configureEach { dependsOn generateFabricMixinConfig }
+
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
 }
 
 if (!rootProject.enableTests.toBoolean()) {
