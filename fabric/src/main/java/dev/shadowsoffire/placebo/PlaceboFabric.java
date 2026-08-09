@@ -11,7 +11,10 @@ import dev.shadowsoffire.placebo.network.FabricPayloadSender;
 import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
 import dev.shadowsoffire.placebo.network.PayloadHelper;
 import dev.shadowsoffire.placebo.network.PayloadSender;
+import dev.shadowsoffire.placebo.attachment.DataAttachment;
+import dev.shadowsoffire.placebo.attachment.FabricDataAttachment;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
+import net.minecraft.resources.Identifier;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
 import dev.shadowsoffire.placebo.systems.gear.GearSetRegistry;
 import dev.shadowsoffire.placebo.tabs.FabricTabFillContext;
@@ -88,6 +91,16 @@ public class PlaceboFabric implements ModInitializer {
         FakePlayerHelper.setImpl(new FabricFakePlayerHelper());
         MobSpawnHelper.setImpl(new FabricMobSpawnHelper());
         PersistentData.setImpl(new FabricPersistentData());
+        // Attachments. Anonymous rather than a method reference: the factory method is generic.
+        DeferredHelper.setAttachmentFactory(new DeferredHelper.AttachmentFactory() {
+
+            @Override
+            public <T> DataAttachment<T> create(Identifier id, java.util.function.Supplier<T> defaultValue,
+                java.util.function.UnaryOperator<DataAttachment.Builder<T>> config) {
+                return FabricDataAttachment.build(id, defaultValue, config);
+            }
+        });
+
 
         Placebo.LOGGER.info("Placebo (Fabric) initialized.");
     }

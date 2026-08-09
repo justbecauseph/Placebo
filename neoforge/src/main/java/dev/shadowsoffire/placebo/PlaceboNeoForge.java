@@ -9,6 +9,8 @@ import dev.shadowsoffire.placebo.datagen.FieldOrderingFactory;
 import dev.shadowsoffire.placebo.datagen.RegisterFieldOrderingsEvent;
 import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.NeoForgeDynReg;
+import dev.shadowsoffire.placebo.attachment.DataAttachment;
+import dev.shadowsoffire.placebo.attachment.NeoForgeDataAttachment;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.registry.NeoForgeDeferredHelper;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
@@ -65,6 +67,16 @@ public class PlaceboNeoForge {
         FakePlayerHelper.setImpl(new NeoForgeFakePlayerHelper());
         MobSpawnHelper.setImpl(new NeoForgeMobSpawnHelper());
         PersistentData.setImpl(new NeoForgePersistentData());
+        // Attachments. Anonymous rather than a method reference: the factory method is generic.
+        DeferredHelper.setAttachmentFactory(new DeferredHelper.AttachmentFactory() {
+
+            @Override
+            public <T> DataAttachment<T> create(Identifier id, java.util.function.Supplier<T> defaultValue,
+                java.util.function.UnaryOperator<DataAttachment.Builder<T>> config) {
+                return NeoForgeDataAttachment.build(defaultValue, config);
+            }
+        });
+
         PlaceboConfig.load();
     }
 

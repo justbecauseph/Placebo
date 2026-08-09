@@ -27,6 +27,7 @@ import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType.TickSide;
 import dev.shadowsoffire.placebo.util.DeferredSet;
 import net.minecraft.advancements.triggers.CriterionTrigger;
 import dev.architectury.registry.registries.DeferredRegister;
+import dev.shadowsoffire.placebo.attachment.DataAttachment;
 import dev.architectury.registry.registries.RegistrySupplier;
 import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
@@ -121,6 +122,41 @@ public class DeferredHelper {
 
     protected DeferredHelper(String modid) {
         this.modid = modid;
+    }
+
+    /**
+     * Registers a {@link DataAttachment} with the given default value.
+     * <p>
+     * Common because both loaders have the concept and this stack only ever attaches to entities and block
+     * entities, which both support. See {@code DataAttachment} for the one case that would not have
+     * transferred -- ItemStack -- and why none exists here.
+     */
+    public <T> DataAttachment<T> attachment(String path, Supplier<T> defaultValue,
+        UnaryOperator<DataAttachment.Builder<T>> config) {
+        return ATTACHMENT_FACTORY.create(Identifier.fromNamespaceAndPath(this.modid, path), defaultValue, config);
+    }
+
+    /**
+     * Platform factory for {@link #attachment}. Installed by the platform entrypoint, like {@link #FACTORY}.
+     */
+    private static AttachmentFactory ATTACHMENT_FACTORY = new AttachmentFactory() {
+
+        @Override
+        public <T> DataAttachment<T> create(Identifier id, Supplier<T> defaultValue,
+            UnaryOperator<DataAttachment.Builder<T>> config) {
+            // Not a lambda: the method is generic, and a generic method cannot be a lambda target.
+            throw new IllegalStateException("No attachment factory installed; the platform entrypoint must "
+                + "call DeferredHelper.setAttachmentFactory before any attachment is declared.");
+        }
+    };
+
+    public static void setAttachmentFactory(AttachmentFactory factory) {
+        ATTACHMENT_FACTORY = java.util.Objects.requireNonNull(factory);
+    }
+
+    public interface AttachmentFactory {
+        <T> DataAttachment<T> create(Identifier id, Supplier<T> defaultValue,
+            UnaryOperator<DataAttachment.Builder<T>> config);
     }
 
     /**

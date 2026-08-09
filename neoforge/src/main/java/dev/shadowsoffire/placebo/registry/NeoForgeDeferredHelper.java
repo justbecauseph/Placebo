@@ -39,8 +39,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.BlockEntityType.BlockEntitySupplier;
-import net.neoforged.neoforge.attachment.AttachmentType;
-import net.neoforged.neoforge.attachment.IAttachmentHolder;
 import net.neoforged.neoforge.common.crafting.ICustomIngredient;
 import net.neoforged.neoforge.common.crafting.IngredientType;
 import net.neoforged.neoforge.common.loot.IGlobalLootModifier;
@@ -134,27 +132,7 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
         return this.menuType(path, MenuUtil.bufType(factory));
     }
 
-    /**
-     * Registers an {@link AttachmentType} with the specified default value, that is configured with the supplied operator.
-     * <p>
-     * Immediately constructs the {@link AttachmentType} and returns it. Registration is deferred until the appropriate time.
-     */
-    public <T> AttachmentType<T> attachment(String path, Supplier<T> defaultValue, UnaryOperator<AttachmentType.Builder<T>> operator) {
-        AttachmentType<T> type = operator.apply(AttachmentType.builder(defaultValue)).build();
-        this.register(path, NeoForgeRegistries.Keys.ATTACHMENT_TYPES, () -> type);
-        return type;
-    }
 
-    /**
-     * Registers an {@link AttachmentType} with the specified default value, that is configured with the supplied operator.
-     * <p>
-     * Immediately constructs the {@link AttachmentType} and returns it. Registration is deferred until the appropriate time.
-     */
-    public <T> AttachmentType<T> attachment(String path, Function<IAttachmentHolder, T> defaultValue, UnaryOperator<AttachmentType.Builder<T>> operator) {
-        AttachmentType<T> type = operator.apply(AttachmentType.builder(defaultValue)).build();
-        this.register(path, NeoForgeRegistries.Keys.ATTACHMENT_TYPES, () -> type);
-        return type;
-    }
 
     /**
      * Registers a codec for an {@link IGlobalLootModifier} and returns it.
