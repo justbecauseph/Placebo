@@ -7,6 +7,7 @@ import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.FabricDynReg;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
 import dev.shadowsoffire.placebo.network.FabricPayloadRegistrar;
+import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
 import dev.shadowsoffire.placebo.network.PayloadHelper;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
@@ -23,9 +24,9 @@ import net.minecraft.network.chat.TextColor;
  *
  * <table>
  * <tr><th>NeoForge does</th><th>Fabric status</th></tr>
- * <tr><td>{@code ButtonClickPayload} / {@code PatreonDisablePayload}</td>
- * <td>Both still live in {@code neoforge/}, on the menu and screen code that has no Fabric counterpart yet.
- * Not registered here, rather than half-registered.</td></tr>
+ * <tr><td>{@code PatreonDisablePayload}</td>
+ * <td>Reaches {@code TrailsManager}/{@code WingsManager}, which are client cosmetics code still in
+ * {@code neoforge/}. ({@code ButtonClickPayload} turned out to be fully portable and is registered below.)</td></tr>
  * <tr><td>{@code MixRegistry}</td><td>Platform-side: it reaches into {@code PotionBrewing} internals.</td></tr>
  * <tr><td>{@code GradientColor.RAINBOW}</td><td>Platform-side with the rest of the colour handling.</td></tr>
  * <tr><td>Dynamic tag <em>loading</em></td><td>Needs {@code TagFile.remove()}, a NeoForge added field. Tag <em>syncing</em> works.</td></tr>
@@ -59,6 +60,7 @@ public class PlaceboFabric implements ModInitializer {
         PayloadHelper.registerPayload(new DynRegPayloads.Content.Provider<>());
         PayloadHelper.registerPayload(new DynRegPayloads.End.Provider());
         PayloadHelper.registerPayload(new TagSyncPayload.Provider());
+        PayloadHelper.registerPayload(new ButtonClickPayload.Provider());
 
         // Gear sets are a plain dynamic registry, so they work as soon as dynreg does.
         GearSetRegistry.INSTANCE.registerToBus();
