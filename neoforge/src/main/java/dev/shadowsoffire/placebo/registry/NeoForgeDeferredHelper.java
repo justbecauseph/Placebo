@@ -257,8 +257,25 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
      */
     @SafeVarargs
     public final <T extends BlockEntity & TickingBlockEntity> TickingBlockEntityType<T> tickingBlockEntity(String path, BlockEntitySupplier<T> factory, TickSide side, Holder<Block>... validBlocks) {
+        return this.tickingBlockEntity(path, factory, side, () -> Arrays.stream(validBlocks).map(Holder::value).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Registers a {@link TickingBlockEntityType} given a vararg array of block suppliers.
+     * <p>
+     * Prefer this over the {@link Holder} vararg form for your own blocks -- see the note on
+     * {@link #blockEntity(String, BlockEntitySupplier, Supplier...)}. {@code asHolder()} returns null until
+     * registration has run, and these calls sit in static initializers.
+     */
+    @SafeVarargs
+    public final <T extends BlockEntity & TickingBlockEntity> TickingBlockEntityType<T> tickingBlockEntity(String path, BlockEntitySupplier<T> factory, TickSide side, Supplier<? extends Block>... validBlocks) {
+        return this.tickingBlockEntity(path, factory, side, () -> Arrays.stream(validBlocks).map(Supplier::get).collect(Collectors.toSet()));
+    }
+
+    /** Shared implementation for the vararg {@code tickingBlockEntity} overloads. */
+    private <T extends BlockEntity & TickingBlockEntity> TickingBlockEntityType<T> tickingBlockEntity(String path, BlockEntitySupplier<T> factory, TickSide side, Supplier<Set<Block>> validBlocks) {
         unfreezeBETypeRegistry();
-        TickingBlockEntityType<T> type = new TickingBlockEntityType<>(factory, new DeferredSet<>(() -> Arrays.stream(validBlocks).map(Holder::value).collect(Collectors.toSet())), side);
+        TickingBlockEntityType<T> type = new TickingBlockEntityType<>(factory, new DeferredSet<>(validBlocks), side);
         this.register(path, Registries.BLOCK_ENTITY_TYPE, () -> {
             type.getValidBlocks(); // Force resolution of the DeferredSet during registration
             return type;
