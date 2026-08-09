@@ -15,6 +15,8 @@ import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
 import dev.shadowsoffire.placebo.systems.gear.GearSetRegistry;
 import dev.shadowsoffire.placebo.tabs.FabricTabFillContext;
+import dev.shadowsoffire.placebo.util.FabricFakePlayerHelper;
+import dev.shadowsoffire.placebo.util.FakePlayerHelper;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.network.chat.TextColor;
@@ -79,6 +81,7 @@ public class PlaceboFabric implements ModInitializer {
         // Outbound dispatch. Separate from the registrar above: that one runs once at startup and locks,
         // this one is called for the rest of the session.
         PayloadSender.setImpl(new FabricPayloadSender());
+        FakePlayerHelper.setImpl(new FabricFakePlayerHelper());
 
         Placebo.LOGGER.info("Placebo (Fabric) initialized.");
     }
