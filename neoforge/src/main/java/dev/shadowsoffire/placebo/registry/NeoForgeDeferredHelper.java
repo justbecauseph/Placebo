@@ -13,6 +13,7 @@ import org.jetbrains.annotations.Nullable;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 
+import dev.architectury.platform.hooks.EventBusesHooks;
 import dev.architectury.registry.registries.RegistrySupplier;
 import dev.shadowsoffire.placebo.block_entity.TickingBlockEntity;
 import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType;
@@ -82,6 +83,12 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
 
     public NeoForgeDeferredHelper(String modid) {
         super(modid);
+        // Hooks the @SubscribeEvent methods below onto the owning mod's bus. Every consumer used to do this
+        // itself with `bus.register(R)`, which meant each one needed an IEventBus in hand -- and that single
+        // import was the last thing keeping some registry-object classes on the platform side. Doing it here
+        // is also harder to forget: a helper that is never registered silently loses its custom registries
+        // and data maps.
+        EventBusesHooks.whenAvailable(modid, bus -> bus.register(this));
     }
 
     protected <T> void registerRegistry(ResourceKey<? extends Registry<T>> key, Registry<T> registry) {
