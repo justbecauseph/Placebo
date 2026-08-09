@@ -7,8 +7,10 @@ import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.FabricDynReg;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
 import dev.shadowsoffire.placebo.network.FabricPayloadRegistrar;
+import dev.shadowsoffire.placebo.network.FabricPayloadSender;
 import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
 import dev.shadowsoffire.placebo.network.PayloadHelper;
+import dev.shadowsoffire.placebo.network.PayloadSender;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
 import dev.shadowsoffire.placebo.systems.gear.GearSetRegistry;
@@ -73,6 +75,10 @@ public class PlaceboFabric implements ModInitializer {
 
         // Flush everything registered so far into Fabric's networking API.
         FabricPayloadRegistrar.register();
+
+        // Outbound dispatch. Separate from the registrar above: that one runs once at startup and locks,
+        // this one is called for the rest of the session.
+        PayloadSender.setImpl(new FabricPayloadSender());
 
         Placebo.LOGGER.info("Placebo (Fabric) initialized.");
     }
