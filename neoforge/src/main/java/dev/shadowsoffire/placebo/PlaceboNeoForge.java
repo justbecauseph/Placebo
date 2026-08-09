@@ -14,6 +14,7 @@ import dev.shadowsoffire.placebo.registry.NeoForgeDeferredHelper;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import dev.shadowsoffire.placebo.events.ResourceReloadEvent;
+import dev.shadowsoffire.placebo.network.NeoForgePayloadRegistrar;
 import dev.shadowsoffire.placebo.network.PayloadHelper;
 import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
 import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload;
@@ -48,7 +49,7 @@ public class PlaceboNeoForge {
         NeoForge.EVENT_BUS.addListener(this::serverStart);
         TextColor.NAMED_COLORS = new HashMap<>(TextColor.NAMED_COLORS);
         bus.addListener(TabFillingRegistry::fillTabs);
-        bus.register(new PayloadHelper());
+        bus.register(new NeoForgePayloadRegistrar());
         PlaceboConfig.load();
     }
 

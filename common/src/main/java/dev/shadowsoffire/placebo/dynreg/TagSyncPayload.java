@@ -17,7 +17,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import dev.shadowsoffire.placebo.network.PayloadContext;
 
 /**
  * Sync payload for the resolved tag content of a single {@link DynamicRegistry}.
@@ -79,7 +79,7 @@ public record TagSyncPayload(Identifier id, Map<Identifier, List<Identifier>> ta
         }
 
         @Override
-        public void handleClient(TagSyncPayload msg, IPayloadContext ctx) {
+        public void handleClient(TagSyncPayload msg, PayloadContext ctx) {
             SyncManagement.acceptTags(msg.id, msg.tags);
         }
 

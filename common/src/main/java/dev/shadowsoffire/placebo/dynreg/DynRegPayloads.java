@@ -18,8 +18,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
-import net.neoforged.neoforge.network.connection.ConnectionType;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import dev.shadowsoffire.placebo.network.PayloadContext;
 
 @ApiStatus.Internal
 public class DynRegPayloads {
@@ -50,7 +49,7 @@ public class DynRegPayloads {
             }
 
             @Override
-            public void handleClient(Start msg, IPayloadContext ctx) {
+            public void handleClient(Start msg, PayloadContext ctx) {
                 SyncManagement.initSync(msg.id);
             }
 
@@ -123,8 +122,8 @@ public class DynRegPayloads {
             }
 
             @Override
-            public void handleClient(Content<?> msg, IPayloadContext ctx) {
-                RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(msg.item.right().get(), ctx.player().registryAccess(), ConnectionType.NEOFORGE);
+            public void handleClient(Content<?> msg, PayloadContext ctx) {
+                RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(msg.item.right().get(), ctx.player().registryAccess());
 
                 try {
                     V value = SyncManagement.readItem(msg.id, buf);
@@ -179,7 +178,7 @@ public class DynRegPayloads {
             }
 
             @Override
-            public void handleClient(End msg, IPayloadContext ctx) {
+            public void handleClient(End msg, PayloadContext ctx) {
                 SyncManagement.endSync(msg.id);
             }
 

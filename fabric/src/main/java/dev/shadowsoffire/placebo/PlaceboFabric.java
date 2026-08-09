@@ -1,5 +1,6 @@
 package dev.shadowsoffire.placebo;
 
+import dev.shadowsoffire.placebo.network.FabricPayloadRegistrar;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
 import net.fabricmc.api.ModInitializer;
@@ -13,22 +14,21 @@ import net.fabricmc.api.ModInitializer;
  * <table>
  * <tr><th>NeoForge does</th><th>Fabric status</th></tr>
  * <tr><td>{@code NeoForgeDynReg.install()}</td>
- * <td>Blocked. The {@code DynRegPlatform} hooks are implementable -- {@code ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS}
- * is an exact analogue of {@code OnDatapackSyncEvent}, and Architectury's {@code ReloadListenerRegistry} covers
- * listener registration -- but the {@code SyncHandler} sends {@code DynRegPayloads}, and Placebo's whole
- * networking layer ({@code PayloadProvider}, {@code PayloadHelper}) is still NeoForge-side. See below.</td></tr>
+ * <td>Unblocked, not yet written. The networking prerequisite is done: payloads, {@code PayloadProvider} and
+ * {@code PayloadHelper} are now in {@code :common}, and {@code FabricPayloadRegistrar} flushes them into
+ * Fabric's API. What remains is {@code FabricDynReg} itself -- {@code ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS}
+ * for sync, Architectury's {@code ReloadListenerRegistry} for listener registration, and a
+ * {@code ReloadContext} whose {@code conditionsMatch} maps onto {@code fabric-resource-conditions-api-v1}.</td></tr>
  * <tr><td>Command registration</td><td>Straightforward: {@code CommandRegistrationCallback}.</td></tr>
  * <tr><td>{@code TextColor.NAMED_COLORS} rewrite</td><td>Portable -- it is a vanilla field reached through the access widener.</td></tr>
  * <tr><td>{@code TabFillingRegistry::fillTabs}</td><td>Needs {@code ItemGroupEvents}.</td></tr>
  * </table>
  *
- * <h2>The networking prerequisite</h2>
- * The dynamic-registry sync payloads are portable data -- records over {@code CustomPacketPayload} and
- * {@code StreamCodec}, both vanilla. Their NeoForge coupling is confined to the <em>handlers</em>
- * ({@code IPayloadContext}) and one {@code ConnectionType.NEOFORGE}. So the split is the same one that
- * {@code ReloadContext} already makes: move the payload records and stream codecs to {@code :common}, keep
- * registration and handling behind a platform interface. That refactor is the real content of {@code P2-B-1},
- * and it gates {@code dynreg} on Fabric -- which in turn gates every affix, gem, rarity, invader and elite.
+ * <h2>Registration ordering</h2>
+ * {@link dev.shadowsoffire.placebo.network.PayloadHelper#drain} locks registration, so this initializer must
+ * run after every mod that registers payloads. Fabric orders {@code main} entrypoints by mod dependency, and
+ * Placebo's dependents all depend on it -- so if a downstream mod registers from its own initializer, that
+ * runs first. A mod registering later would now throw rather than be silently dropped, which is the intent.
  */
 public class PlaceboFabric implements ModInitializer {
 
@@ -36,7 +36,12 @@ public class PlaceboFabric implements ModInitializer {
     public void onInitialize() {
         // The base DeferredHelper is fully loader-neutral; only the 16 platform-only methods are missing here.
         DeferredHelper.setFactory(FabricDeferredHelper::new);
-        Placebo.LOGGER.info("Placebo (Fabric) initialized -- registration only; dynreg is not yet wired up.");
+
+        // Flush whatever payloads have been registered by now into Fabric's networking API. Mods register
+        // during their own initializer, so this has to run after them -- see the note on ordering below.
+        FabricPayloadRegistrar.register();
+
+        Placebo.LOGGER.info("Placebo (Fabric) initialized.");
     }
 
 }

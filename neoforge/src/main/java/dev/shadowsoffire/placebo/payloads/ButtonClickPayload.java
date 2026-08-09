@@ -14,7 +14,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import dev.shadowsoffire.placebo.network.PayloadContext;
 
 /**
  * Allows for easy implementations of client->server button presses. Sends an integer that allows for arbitrary data encoding schemes within the integer
@@ -53,7 +53,7 @@ public record ButtonClickPayload(int button) implements CustomPacketPayload {
         }
 
         @Override
-        public void handleServer(ButtonClickPayload msg, IPayloadContext ctx) {
+        public void handleServer(ButtonClickPayload msg, PayloadContext ctx) {
             if (ctx.player().containerMenu instanceof IButtonContainer) {
                 ((IButtonContainer) ctx.player().containerMenu).onButtonClick(msg.button);
             }

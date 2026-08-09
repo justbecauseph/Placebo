@@ -1,8 +1,6 @@
 package dev.shadowsoffire.placebo.network;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import com.google.common.base.Preconditions;
@@ -17,39 +15,19 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 import net.neoforged.neoforge.network.handling.IPayloadHandler;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
-public class PayloadHelper {
-
-    private static final Map<CustomPacketPayload.Type<?>, PayloadProvider<?>> ALL_PROVIDERS = new HashMap<>();
-    private static boolean locked = false;
-
-    /**
-     * Registers a payload using {@link PayloadProvider}.
-     *
-     * @param channel Channel to register for.
-     * @param id      The ID of the payload being registered.
-     * @param prov    An instance of the payload provider.
-     */
-    public static <T extends CustomPacketPayload> void registerPayload(PayloadProvider<T> prov) {
-        Preconditions.checkNotNull(prov);
-        synchronized (ALL_PROVIDERS) {
-            if (locked) {
-                throw new UnsupportedOperationException("Attempted to register a payload provider after registration has finished.");
-            }
-            if (ALL_PROVIDERS.containsKey(prov.getType())) {
-                throw new UnsupportedOperationException("Attempted to register payload provider with duplicate ID: " + prov.getType().id());
-            }
-            ALL_PROVIDERS.put(prov.getType(), prov);
-        }
-    }
+/**
+ * Flushes {@link PayloadHelper}'s providers into NeoForge's network registry, and dispatches incoming
+ * payloads to them.
+ * <p>
+ * The provider bookkeeping lives in {@link PayloadHelper} (common); only this half is loader-specific.
+ */
+public class NeoForgePayloadRegistrar {
 
     @SubscribeEvent
     @SuppressWarnings({ "unchecked", "rawtypes" })
     public void registerProviders(RegisterPayloadHandlersEvent event) {
-        synchronized (ALL_PROVIDERS) {
-            for (PayloadProvider prov : ALL_PROVIDERS.values()) {
-                NetworkRegistry.register(prov.getType(), prov.getCodec(), new PayloadHandler(prov), new PayloadHandler(prov), prov.getSupportedProtocols(), prov.getFlow(), prov.getVersion(), prov.isOptional());
-            }
-            locked = true;
+        for (PayloadProvider prov : PayloadHelper.drain()) {
+            NetworkRegistry.register(prov.getType(), prov.getCodec(), new PayloadHandler(prov), new PayloadHandler(prov), prov.getSupportedProtocols(), prov.getFlow(), prov.getVersion(), prov.isOptional());
         }
     }
 
@@ -80,14 +58,14 @@ public class PayloadHelper {
 
             if (context.flow() == PacketFlow.CLIENTBOUND) {
                 switch (provider.getHandlerThread()) {
-                    case MAIN -> context.enqueueWork(() -> this.provider.handleClient(payload, context));
-                    case NETWORK -> this.provider.handleClient(payload, context);
+                    case MAIN -> context.enqueueWork(() -> this.provider.handleClient(payload, new NeoForgePayloadContext(context)));
+                    case NETWORK -> this.provider.handleClient(payload, new NeoForgePayloadContext(context));
                 }
             }
             else {
                 switch (provider.getHandlerThread()) {
-                    case MAIN -> context.enqueueWork(() -> this.provider.handleServer(payload, context));
-                    case NETWORK -> this.provider.handleServer(payload, context);
+                    case MAIN -> context.enqueueWork(() -> this.provider.handleServer(payload, new NeoForgePayloadContext(context)));
+                    case NETWORK -> this.provider.handleServer(payload, new NeoForgePayloadContext(context));
                 }
             }
         }

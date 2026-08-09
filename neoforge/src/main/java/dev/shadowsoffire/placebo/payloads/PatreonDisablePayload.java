@@ -21,7 +21,7 @@ import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.util.ByIdMap;
 import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import dev.shadowsoffire.placebo.network.PayloadContext;
 
 public record PatreonDisablePayload(CosmeticType cosmetic, UUID id) implements CustomPacketPayload {
 
@@ -58,12 +58,12 @@ public record PatreonDisablePayload(CosmeticType cosmetic, UUID id) implements C
         }
 
         @Override
-        public void handleServer(PatreonDisablePayload msg, IPayloadContext ctx) {
+        public void handleServer(PatreonDisablePayload msg, PayloadContext ctx) {
             PacketDistributor.sendToAllPlayers(new PatreonDisablePayload(msg.cosmetic(), ctx.player().getUUID()));
         }
 
         @Override
-        public void handleClient(PatreonDisablePayload msg, IPayloadContext ctx) {
+        public void handleClient(PatreonDisablePayload msg, PayloadContext ctx) {
             Set<UUID> set = switch (msg.cosmetic()) {
                 case TRAILS -> TrailsManager.DISABLED;
                 case WINGS -> WingsManager.DISABLED;

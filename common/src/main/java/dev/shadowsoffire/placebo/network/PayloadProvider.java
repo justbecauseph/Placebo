@@ -9,8 +9,6 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
-import net.neoforged.neoforge.network.registration.HandlerThread;
 
 /**
  * A Payload Provider encapsulates the default components that make up a custom payload packet registration.
@@ -37,7 +35,7 @@ public interface PayloadProvider<T extends CustomPacketPayload> {
      * @param msg The messsage to handle.
      * @param ctx Relevant network context information.
      */
-    default void handleClient(T msg, IPayloadContext ctx) {}
+    default void handleClient(T msg, PayloadContext ctx) {}
 
     /**
      * Handle the payload when received on the server.
@@ -46,7 +44,7 @@ public interface PayloadProvider<T extends CustomPacketPayload> {
      * @param msg The messsage to handle.
      * @param ctx Relevant network context information.
      */
-    default void handleServer(T msg, IPayloadContext ctx) {}
+    default void handleServer(T msg, PayloadContext ctx) {}
 
     /**
      * Gets a list of all supported connection protocols. This method may allocated a new list, as it is only called once.
@@ -78,7 +76,7 @@ public interface PayloadProvider<T extends CustomPacketPayload> {
     }
 
     /**
-     * @return The thread that will be used to execute the {@link #handle(CustomPacketPayload, IPayloadContext)} method.
+     * @return The thread that will be used to execute the {@link #handleClient} / {@link #handleServer} method.
      */
     default HandlerThread getHandlerThread() {
         return HandlerThread.MAIN;
