@@ -126,13 +126,6 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
     }
 
     /**
-     * Registers a {@link MenuType} for the provided {@link MenuSupplier}.
-     */
-    public <T extends AbstractContainerMenu> MenuType<T> menu(String path, MenuSupplier<T> factory) {
-        return this.menuType(path, MenuUtil.type(factory));
-    }
-
-    /**
      * Registers a {@link MenuType} for the provided {@link PosFactory}.
      */
     public <T extends AbstractContainerMenu> MenuType<T> menuWithPos(String path, PosFactory<T> factory) {
@@ -218,17 +211,6 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
             type.getValidBlocks(); // Force resolution of the DeferredSet during registration
             return type;
         });
-        return type;
-    }
-
-    /**
-     * Registers a {@link RecipeType} using {@link RecipeType#simple(Identifier)}.
-     * <p>
-     * Immediately constructs the {@link RecipeType} and returns it. Registration is deferred until the appropriate time.
-     */
-    public <C extends RecipeInput, U extends Recipe<C>> RecipeType<U> recipe(String path) {
-        RecipeType<U> type = RecipeType.simple(Identifier.fromNamespaceAndPath(this.modid, path));
-        this.recipe(path, () -> type);
         return type;
     }
 

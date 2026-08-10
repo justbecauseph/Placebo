@@ -475,6 +475,42 @@ public class DeferredHelper {
 
 
     /**
+     * Registers a {@link MenuType} for a menu that needs no data beyond the player's inventory.
+     * <p>
+     * Vanilla's own constructor, so this needed no platform half. The forms that carry extra data --
+     * {@code menuWithPos} and {@code menuWithData} -- still do: NeoForge passes a raw buffer through
+     * {@code IContainerFactory}, Fabric a typed payload through {@code ExtendedScreenHandlerType}, and the
+     * two disagree about more than a name.
+     */
+    public <T extends AbstractContainerMenu> MenuType<T> menu(String path, MenuSupplier<T> factory) {
+        MenuType<T> type = new MenuType<>(factory, net.minecraft.world.flag.FeatureFlags.DEFAULT_FLAGS);
+        this.menuType(path, type);
+        return type;
+    }
+
+    /**
+     * Registers a bare {@link RecipeType} and returns it, so the declaration can be a single assignment.
+     * <p>
+     * NeoForge offers {@code RecipeType#simple(Identifier)} for this and Fabric does not, but the thing it
+     * builds is a five-line anonymous class over a vanilla interface whose only member is {@code toString}.
+     * Writing it here rather than reaching for the platform's version is the whole of the port.
+     * <p>
+     * Immediately constructs the type and returns it; registration is deferred as usual.
+     */
+    public <C extends RecipeInput, U extends Recipe<C>> RecipeType<U> recipe(String path) {
+        String name = Identifier.fromNamespaceAndPath(this.modid, path).toString();
+        RecipeType<U> type = new RecipeType<>() {
+
+            @Override
+            public String toString() {
+                return name;
+            }
+        };
+        this.recipe(path, () -> type);
+        return type;
+    }
+
+    /**
      * Registers a {@link RecipeType} using a supplier.
      */
     public <C extends RecipeInput, U extends Recipe<C>, T extends RecipeType<U>> RegistrySupplier<T> recipe(String path, Supplier<T> factory) {
