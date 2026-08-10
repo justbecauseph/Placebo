@@ -9,6 +9,7 @@ import dev.architectury.event.EventFactory;
 import dev.architectury.event.EventResult;
 import net.minecraft.core.Holder;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -17,6 +18,7 @@ import net.minecraft.world.item.ItemInstance;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.level.ServerLevelAccessor;
 
 /**
  * Loader-neutral events for the cases NeoForge has and Fabric does not.
@@ -416,6 +418,146 @@ public class PlaceboEvents {
      */
     public static void fireLivingDrops(LivingEntity entity, DamageSource source, Collection<ItemEntity> drops, boolean willSpawn) {
         LIVING_DROPS.invoker().drops(new LivingDropsContext(entity, source, drops, willSpawn));
+    }
+
+    /**
+     * Fired when a {@link Mob} is about to run its natural despawn check, so that listeners can force the
+     * despawn or prevent it.
+     * <p>
+     * NeoForge counterpart: {@code MobDespawnEvent}. Vanilla sites: {@code Mob#checkDespawn} and
+     * {@code WitherBoss#checkDespawn}, which overrides it without calling super.
+     * <p>
+     * <b>Last writer wins, rather than first.</b> Every listener runs and the result is a mutable field, which
+     * is NeoForge's behaviour — a low-priority listener overriding a high-priority one is load-bearing here,
+     * since Gateways denies despawns for its own mobs from {@code LOWEST} specifically to beat everyone else.
+     * Architectury's interrupting {@code EventResult} would have given first-writer-wins and quietly inverted
+     * that.
+     */
+    public static final Event<MobDespawn> MOB_DESPAWN = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface MobDespawn {
+        void check(MobDespawnContext ctx);
+    }
+
+    /**
+     * What a {@link #MOB_DESPAWN} listener wants to happen, mirroring NeoForge's {@code MobDespawnEvent.Result}.
+     */
+    public enum DespawnResult {
+        /** Run vanilla's despawn logic unchanged. */
+        DEFAULT,
+        /** Despawn the mob, whatever vanilla would have decided. */
+        ALLOW,
+        /** Keep the mob, and reset its no-action timer so it is not reconsidered immediately. */
+        DENY
+    }
+
+    /**
+     * Mutable state for {@link #MOB_DESPAWN}.
+     */
+    public static final class MobDespawnContext {
+
+        private final Mob entity;
+        private final ServerLevelAccessor level;
+        private DespawnResult result = DespawnResult.DEFAULT;
+
+        public MobDespawnContext(Mob entity, ServerLevelAccessor level) {
+            this.entity = entity;
+            this.level = level;
+        }
+
+        public Mob getEntity() {
+            return this.entity;
+        }
+
+        public ServerLevelAccessor getLevel() {
+            return this.level;
+        }
+
+        public DespawnResult getResult() {
+            return this.result;
+        }
+
+        public void setResult(DespawnResult result) {
+            this.result = result;
+        }
+    }
+
+    /**
+     * Fires {@link #MOB_DESPAWN}. Called by the platform bridge, not by mods.
+     * <p>
+     * Deliberately has no side effects: NeoForge applies the discard and the timer reset itself once its own
+     * event carries the result back, so doing it here too would do it twice. Fabric's mixin applies them.
+     *
+     * @return what the listeners decided.
+     */
+    public static DespawnResult fireMobDespawn(Mob mob, ServerLevelAccessor level) {
+        MobDespawnContext ctx = new MobDespawnContext(mob, level);
+        MOB_DESPAWN.invoker().check(ctx);
+        return ctx.getResult();
+    }
+
+    /**
+     * Fired whenever an entity is asked whether it is immune to a damage source, after vanilla has decided and
+     * before the answer is used.
+     * <p>
+     * NeoForge counterpart: {@code EntityInvulnerabilityCheckEvent}. Vanilla site:
+     * {@code Entity#isInvulnerableToBase}, whose return NeoForge wraps.
+     * <p>
+     * This fires on a very hot path — every damage check on every entity — so listeners should return quickly.
+     * That is equally true on NeoForge, which posts its event from the same place.
+     */
+    public static final Event<InvulnerabilityCheck> ENTITY_INVULNERABILITY_CHECK = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface InvulnerabilityCheck {
+        void check(InvulnerabilityContext ctx);
+    }
+
+    /**
+     * Mutable state for {@link #ENTITY_INVULNERABILITY_CHECK}.
+     */
+    public static final class InvulnerabilityContext {
+
+        private final Entity entity;
+        private final DamageSource source;
+        private boolean invulnerable;
+
+        public InvulnerabilityContext(Entity entity, DamageSource source, boolean invulnerable) {
+            this.entity = entity;
+            this.source = source;
+            this.invulnerable = invulnerable;
+        }
+
+        public Entity getEntity() {
+            return this.entity;
+        }
+
+        public DamageSource getSource() {
+            return this.source;
+        }
+
+        /**
+         * What the answer currently is — vanilla's verdict, plus anything an earlier listener changed.
+         */
+        public boolean isInvulnerable() {
+            return this.invulnerable;
+        }
+
+        public void setInvulnerable(boolean invulnerable) {
+            this.invulnerable = invulnerable;
+        }
+    }
+
+    /**
+     * Fires {@link #ENTITY_INVULNERABILITY_CHECK}. Called by the platform bridge, not by mods.
+     *
+     * @return whether the entity is invulnerable to the source, after listeners have run.
+     */
+    public static boolean fireInvulnerabilityCheck(Entity entity, DamageSource source, boolean invulnerable) {
+        InvulnerabilityContext ctx = new InvulnerabilityContext(entity, source, invulnerable);
+        ENTITY_INVULNERABILITY_CHECK.invoker().check(ctx);
+        return ctx.isInvulnerable();
     }
 
 }

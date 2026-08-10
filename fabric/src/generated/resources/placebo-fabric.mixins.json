@@ -9,11 +9,14 @@
         "AbstractCubeMobSplitMixin",
         "EnchantmentHelperMixin",
         "EntityDropCaptureMixin",
+        "EntityInvulnerabilityMixin",
         "ItemStackMixin",
         "LivingEntityDropsMixin",
         "LivingEntityExperienceMixin",
         "LivingEntityHealMixin",
-        "LivingEntityUseItemMixin"
+        "LivingEntityUseItemMixin",
+        "MobDespawnMixin",
+        "WitherBossDespawnMixin"
     ],
     "client": [
         "client.ChatComponentMixin"

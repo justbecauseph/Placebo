@@ -4,10 +4,12 @@ import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
+import net.neoforged.neoforge.event.entity.living.MobDespawnEvent;
 import net.neoforged.neoforge.event.entity.living.MobSplitEvent;
 
 /**
@@ -81,6 +83,24 @@ public class NeoForgeEventBridge {
     @SubscribeEvent(priority = EventPriority.LOW, receiveCanceled = true)
     public void livingDrops(LivingDropsEvent e) {
         PlaceboEvents.fireLivingDrops(e.getEntity(), e.getSource(), e.getDrops(), !e.isCanceled());
+    }
+
+    /**
+     * The result is carried back rather than acted on: NeoForge's own {@code checkMobDespawn} applies the
+     * discard and the timer reset after the event returns, so doing it here would do it twice.
+     */
+    @SubscribeEvent
+    public void mobDespawn(MobDespawnEvent e) {
+        switch (PlaceboEvents.fireMobDespawn(e.getEntity(), e.getLevel())) {
+            case ALLOW -> e.setResult(MobDespawnEvent.Result.ALLOW);
+            case DENY -> e.setResult(MobDespawnEvent.Result.DENY);
+            case DEFAULT -> {}
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void invulnerabilityCheck(EntityInvulnerabilityCheckEvent e) {
+        e.setInvulnerable(PlaceboEvents.fireInvulnerabilityCheck(e.getEntity(), e.getSource(), e.isInvulnerable()));
     }
 
 }
