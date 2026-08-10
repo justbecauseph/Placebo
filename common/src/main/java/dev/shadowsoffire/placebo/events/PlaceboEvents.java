@@ -5,10 +5,14 @@ import org.jetbrains.annotations.Nullable;
 import dev.architectury.event.Event;
 import dev.architectury.event.EventFactory;
 import dev.architectury.event.EventResult;
+import net.minecraft.core.Holder;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemInstance;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 /**
  * Loader-neutral events for the cases NeoForge has and Fabric does not.
@@ -245,6 +249,90 @@ public class PlaceboEvents {
      */
     public static void fireMobSplit(Mob parent, Mob child) {
         MOB_SPLIT.invoker().split(parent, child);
+    }
+
+    /**
+     * Fired whenever an item's enchantment levels are requested <i>for gameplay purposes</i>, so that listeners
+     * can report levels the item does not literally carry in its enchantment component.
+     * <p>
+     * NeoForge counterpart: {@code GetEnchantmentLevelEvent}. Vanilla sites: {@code EnchantmentHelper}'s
+     * {@code getItemEnchantmentLevel}, both {@code runIterationOnItem} overloads, and {@code hasTag} — the four
+     * places NeoForge patches to route through its gameplay-enchantment path.
+     * <p>
+     * <b>Not fired for NBT reads.</b> Anything that reads the {@code ENCHANTMENTS} component directly — the
+     * anvil, the tooltip, {@code getEnchantmentsForCrafting} — sees the unmodified item on both loaders.
+     * <p>
+     * <b>Not cancellable, and the whole map is always passed.</b> NeoForge's event carries a nullable
+     * <i>target</i> enchantment, so a listener querying one enchantment can skip populating the rest. No listener
+     * in this stack reads it — they all rebuild the whole map regardless — so it is not on the context, and both
+     * loaders therefore do the same work per query. NeoForge's own event allocates a mutable map per call too, so
+     * this costs Fabric no more than NeoForge already pays.
+     */
+    public static final Event<EnchantmentLevels> ENCHANTMENT_LEVELS = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface EnchantmentLevels {
+        void modify(EnchantmentLevelContext ctx);
+    }
+
+    /**
+     * Mutable state for {@link #ENCHANTMENT_LEVELS}. The enchantment map <i>is</i> the mutable state — listeners
+     * change levels by calling {@link ItemEnchantments.Mutable#set} / {@link ItemEnchantments.Mutable#upgrade}
+     * on it, exactly as they did on NeoForge.
+     */
+    public static final class EnchantmentLevelContext {
+
+        private final ItemInstance stack;
+        private final ItemEnchantments.Mutable enchantments;
+
+        public EnchantmentLevelContext(ItemInstance stack, ItemEnchantments.Mutable enchantments) {
+            this.stack = stack;
+            this.enchantments = enchantments;
+        }
+
+        /**
+         * The item being queried. This is {@link ItemInstance} rather than {@link ItemStack} because the vanilla
+         * query methods take the wider type; listeners that need a real stack should pattern-match for one.
+         */
+        public ItemInstance getStack() {
+            return this.stack;
+        }
+
+        public ItemEnchantments.Mutable getEnchantments() {
+            return this.enchantments;
+        }
+    }
+
+    /**
+     * Fires {@link #ENCHANTMENT_LEVELS} against a map the caller already holds. Called by the platform bridge,
+     * not by mods.
+     */
+    public static void fireEnchantmentLevels(ItemInstance stack, ItemEnchantments.Mutable enchantments) {
+        ENCHANTMENT_LEVELS.invoker().modify(new EnchantmentLevelContext(stack, enchantments));
+    }
+
+    /**
+     * Fires {@link #ENCHANTMENT_LEVELS} for a single enchantment. Called by the platform bridge, not by mods.
+     *
+     * @return the level of {@code ench} after listeners have run.
+     */
+    public static int fireSingleEnchantmentLevel(ItemInstance stack, Holder<Enchantment> ench, int level) {
+        ItemEnchantments.Mutable enchantments = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
+        enchantments.set(ench, level);
+        fireEnchantmentLevels(stack, enchantments);
+        return enchantments.getLevel(ench);
+    }
+
+    /**
+     * Fires {@link #ENCHANTMENT_LEVELS} for an item's whole enchantment map. Called by the platform bridge, not
+     * by mods.
+     *
+     * @return the map after listeners have run.
+     */
+    public static ItemEnchantments fireAllEnchantmentLevels(ItemInstance stack, ItemEnchantments enchantments) {
+        ItemEnchantments.Mutable mutable = new ItemEnchantments.Mutable(enchantments);
+        fireEnchantmentLevels(stack, mutable);
+        return mutable.toImmutable();
     }
 
 }

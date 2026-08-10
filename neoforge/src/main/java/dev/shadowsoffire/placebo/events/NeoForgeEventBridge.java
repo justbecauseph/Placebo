@@ -1,7 +1,9 @@
 package dev.shadowsoffire.placebo.events;
 
 import net.minecraft.world.entity.Mob;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
@@ -52,6 +54,21 @@ public class NeoForgeEventBridge {
         for (Mob child : e.getChildren()) {
             PlaceboEvents.fireMobSplit(e.getParent(), child);
         }
+    }
+
+    /**
+     * NeoForge's event already hands over a mutable map and reads it back afterwards, so the bridge only has to
+     * pass it through.
+     * <p>
+     * Subscribed at {@link EventPriority#HIGH} because the whole common chain now occupies a single slot on
+     * NeoForge's bus, and the earliest consumer that used to subscribe directly (Apotheosis's affix and gem
+     * boosting) was at {@code HIGH}. Consumers keep their order relative to <i>each other</i> through
+     * Architectury's own {@link dev.architectury.event.EventPriority} when registering on
+     * {@link PlaceboEvents#ENCHANTMENT_LEVELS}.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void enchantmentLevels(GetEnchantmentLevelEvent e) {
+        PlaceboEvents.fireEnchantmentLevels(e.getStack(), e.getEnchantments());
     }
 
 }
