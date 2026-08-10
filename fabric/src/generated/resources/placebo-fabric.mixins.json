@@ -8,7 +8,9 @@
     "mixins": [
         "AbstractCubeMobSplitMixin",
         "EnchantmentHelperMixin",
+        "EntityDropCaptureMixin",
         "ItemStackMixin",
+        "LivingEntityDropsMixin",
         "LivingEntityExperienceMixin",
         "LivingEntityHealMixin",
         "LivingEntityUseItemMixin"

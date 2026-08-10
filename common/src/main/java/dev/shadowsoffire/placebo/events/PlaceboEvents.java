@@ -1,11 +1,15 @@
 package dev.shadowsoffire.placebo.events;
 
+import java.util.Collection;
+
 import org.jetbrains.annotations.Nullable;
 
 import dev.architectury.event.Event;
 import dev.architectury.event.EventFactory;
 import dev.architectury.event.EventResult;
 import net.minecraft.core.Holder;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
@@ -333,6 +337,85 @@ public class PlaceboEvents {
         ItemEnchantments.Mutable mutable = new ItemEnchantments.Mutable(enchantments);
         fireEnchantmentLevels(stack, mutable);
         return mutable.toImmutable();
+    }
+
+    /**
+     * Fired when a {@link LivingEntity} dies, once its death loot has been collected but before any of it reaches
+     * the world, so that listeners can add, remove or move the drops.
+     * <p>
+     * NeoForge counterpart: {@code LivingDropsEvent}. Vanilla site: {@code LivingEntity#dropAllDeathLoot}.
+     * <p>
+     * <b>Vanilla has no list of drops to intercept</b> — it adds each {@link ItemEntity} to the world as it is
+     * produced. Both platforms therefore divert the drops into a collection first: NeoForge through its patched
+     * {@code Entity#captureDrops}, Fabric through a mixin that does the same thing at the same two call sites.
+     * <p>
+     * <b>Not cancellable.</b> Nothing in this stack cancels, and on Fabric there is no platform event to cancel
+     * — the drops are Placebo's own list until it spawns them. What a listener does need to know is whether
+     * anyone <i>else</i> cancelled, which is what {@link LivingDropsContext#willSpawn()} answers.
+     */
+    public static final Event<LivingDrops> LIVING_DROPS = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface LivingDrops {
+        void drops(LivingDropsContext ctx);
+    }
+
+    /**
+     * Mutable state for {@link #LIVING_DROPS}. The drop collection is the mutable part; listeners add to it,
+     * remove from it, and reposition the entities in it.
+     */
+    public static final class LivingDropsContext {
+
+        private final LivingEntity entity;
+        private final DamageSource source;
+        private final Collection<ItemEntity> drops;
+        private final boolean willSpawn;
+
+        public LivingDropsContext(LivingEntity entity, DamageSource source, Collection<ItemEntity> drops, boolean willSpawn) {
+            this.entity = entity;
+            this.source = source;
+            this.drops = drops;
+            this.willSpawn = willSpawn;
+        }
+
+        /**
+         * The entity that died.
+         */
+        public LivingEntity getEntity() {
+            return this.entity;
+        }
+
+        public DamageSource getSource() {
+            return this.source;
+        }
+
+        /**
+         * The drops, which listeners may modify in place.
+         */
+        public Collection<ItemEntity> getDrops() {
+            return this.drops;
+        }
+
+        /**
+         * Whether these drops are actually going to reach the world.
+         * <p>
+         * On NeoForge this is false when another mod has cancelled {@code LivingDropsEvent}, and the event is
+         * still fired so that listeners doing cleanup rather than loot generation can run. On Fabric there is
+         * nothing to cancel, so it is always true.
+         * <p>
+         * A listener that <i>generates</i> loot, plays a sound, or converts drops into something else must
+         * check this; a listener that only tidies up state should not.
+         */
+        public boolean willSpawn() {
+            return this.willSpawn;
+        }
+    }
+
+    /**
+     * Fires {@link #LIVING_DROPS}. Called by the platform bridge, not by mods.
+     */
+    public static void fireLivingDrops(LivingEntity entity, DamageSource source, Collection<ItemEntity> drops, boolean willSpawn) {
+        LIVING_DROPS.invoker().drops(new LivingDropsContext(entity, source, drops, willSpawn));
     }
 
 }

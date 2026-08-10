@@ -4,6 +4,7 @@ import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
@@ -69,6 +70,17 @@ public class NeoForgeEventBridge {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public void enchantmentLevels(GetEnchantmentLevelEvent e) {
         PlaceboEvents.fireEnchantmentLevels(e.getStack(), e.getEnchantments());
+    }
+
+    /**
+     * Subscribed with {@code receiveCanceled} so that cleanup listeners still run when another mod suppresses
+     * the drops, which is what NeoForge's own {@code receiveCanceled = true} handlers were doing before they
+     * moved here. Listeners that generate loot check {@link PlaceboEvents.LivingDropsContext#willSpawn()}
+     * instead of relying on not being called.
+     */
+    @SubscribeEvent(priority = EventPriority.LOW, receiveCanceled = true)
+    public void livingDrops(LivingDropsEvent e) {
+        PlaceboEvents.fireLivingDrops(e.getEntity(), e.getSource(), e.getDrops(), !e.isCanceled());
     }
 
 }
