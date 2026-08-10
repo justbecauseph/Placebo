@@ -28,6 +28,8 @@ import dev.shadowsoffire.placebo.util.DeferredSet;
 import net.minecraft.advancements.triggers.CriterionTrigger;
 import dev.architectury.registry.registries.DeferredRegister;
 import dev.shadowsoffire.placebo.attachment.DataAttachment;
+import dev.shadowsoffire.placebo.crafting.CustomIngredient;
+import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.architectury.registry.registries.RegistrySupplier;
 import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
@@ -112,7 +114,7 @@ public class DeferredHelper {
     /**
      * Platform factory for {@link #create(String)}. NeoForge installs one returning
      * {@code NeoForgeDeferredHelper}, which adds the registration types that only exist there --
-     * attachments, custom ingredients, global loot modifiers, data maps, and menus with extra data.
+     * attachments, global loot modifiers, data maps, and menus with extra data.
      */
     private static java.util.function.Function<String, DeferredHelper> FACTORY = DeferredHelper::new;
 
@@ -194,6 +196,19 @@ public class DeferredHelper {
     public interface AttachmentFactory {
         <T> DataAttachment<T> create(Identifier id, Supplier<T> defaultValue,
             UnaryOperator<DataAttachment.Builder<T>> config);
+    }
+
+    /**
+     * Registers an {@link IngredientType} and returns it, so the declaration can be a single assignment.
+     * <p>
+     * Not staged through a {@link DeferredRegister} the way most things here are: only one loader treats
+     * ingredient types as registry entries. NeoForge's live in its own registry and are staged by
+     * {@code NeoForgeIngredients}; Fabric's are handed to {@code CustomIngredientSerializer.register} on the
+     * spot. The difference is entirely behind {@link IngredientType.Impl}.
+     */
+    public <T extends CustomIngredient> IngredientType<T> ingredient(String path, IngredientType<T> type) {
+        IngredientType.register(this, Identifier.fromNamespaceAndPath(this.modid, path), type);
+        return type;
     }
 
     /**

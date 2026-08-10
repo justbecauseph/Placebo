@@ -39,8 +39,6 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.BlockEntityType.BlockEntitySupplier;
-import net.neoforged.neoforge.common.crafting.ICustomIngredient;
-import net.neoforged.neoforge.common.crafting.IngredientType;
 import net.neoforged.neoforge.common.loot.IGlobalLootModifier;
 import net.neoforged.neoforge.network.IContainerFactory;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -56,7 +54,7 @@ import net.neoforged.neoforge.registries.datamaps.RegisterDataMapTypesEvent;
  * <p>
  * Everything here depends on something NeoForge adds to vanilla and Fabric does not have:
  * <ul>
- * <li>attachments, custom ingredients, global loot modifiers, data maps, {@code IContainerFactory} menus,
+ * <li>attachments, global loot modifiers, data maps, {@code IContainerFactory} menus,
  * and {@code RegistryBuilder}-created registries -- NeoForge-only systems
  * <li>{@code BlockEntityType#getValidBlocks}, {@code MappedRegistry#unfreeze},
  * {@code RecipeType#simple(Identifier)} and the no-arg {@code CreativeModeTab#builder()} -- NeoForge
@@ -125,14 +123,6 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
     public <T extends IGlobalLootModifier> MapCodec<T> lootModifier(String path, MapCodec<T> codec) {
         this.register(path, NeoForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, () -> codec);
         return codec;
-    }
-
-    /**
-     * Registers an {@link IngredientType} and returns it.
-     */
-    public <T extends ICustomIngredient> IngredientType<T> ingredient(String path, IngredientType<T> type) {
-        this.register(path, NeoForgeRegistries.Keys.INGREDIENT_TYPES, () -> type);
-        return type;
     }
 
     /**

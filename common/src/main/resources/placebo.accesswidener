@@ -42,3 +42,9 @@ accessible	field	net/minecraft/world/level/block/entity/BlockEntityType	validBlo
 # needs. This is what made dynamic tag loading loader-neutral; see dynreg/tag/TagFileData.
 accessible	field	net/minecraft/tags/TagEntry	id	Lnet/minecraft/resources/Identifier;
 accessible	field	net/minecraft/tags/TagEntry	tag	Z
+
+# Ingredient#displayForSingleItem is private in vanilla, and *both* loaders widen it -- it is what each of
+# their custom-ingredient interfaces calls in its default display(). So the common default needs it too.
+# Another case of a platform adding access rather than a member: nothing at the call site says it is not
+# ordinary public API.
+accessible	method	net/minecraft/world/item/crafting/Ingredient	displayForSingleItem	(Lnet/minecraft/core/Holder;)Lnet/minecraft/world/item/crafting/display/SlotDisplay;
