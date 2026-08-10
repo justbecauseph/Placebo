@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import org.jetbrains.annotations.Nullable;
 
 import dev.architectury.registry.ReloadListenerRegistry;
+import dev.shadowsoffire.placebo.registry.FabricDataMaps;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
@@ -60,9 +61,15 @@ public final class FabricDynReg {
     /**
      * Registers the registry as a reload listener, ordered before the tag manager so tag loading runs after
      * registry content has been deserialized -- the same ordering NeoForge gets from {@code addDependency}.
+     * <p>
+     * Also declared to run after the data map listener, so a deserializer that reads a data map sees the
+     * loaded values rather than an empty map on the first load and the right one only after {@code /reload}.
+     * Nothing here reads one today; the edge is declared because the failure it prevents is silent and the
+     * dependency costs nothing.
      */
     private static void registerReloadListener(Identifier id, DynamicRegistry<?> registry) {
-        ReloadListenerRegistry.register(PackType.SERVER_DATA, registry, id, List.of(DynamicTagManager.ID));
+        ReloadListenerRegistry.register(PackType.SERVER_DATA, registry, id,
+            List.of(DynamicTagManager.ID, FabricDataMaps.ID));
     }
 
     private static class Sender implements DynRegPlatform.SyncHandler {

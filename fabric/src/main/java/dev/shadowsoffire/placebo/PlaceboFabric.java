@@ -16,6 +16,7 @@ import dev.shadowsoffire.placebo.attachment.FabricDataAttachment;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.shadowsoffire.placebo.registry.FabricIngredients;
+import dev.shadowsoffire.placebo.registry.FabricDataMaps;
 import dev.shadowsoffire.placebo.registry.FabricRegistryFactory;
 import net.minecraft.resources.Identifier;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
@@ -61,6 +62,8 @@ public class PlaceboFabric implements ModInitializer {
         // The base DeferredHelper is fully loader-neutral; only the 16 platform-only methods are missing here.
         DeferredHelper.setFactory(FabricDeferredHelper::new);
         DeferredHelper.setRegistryFactory(new FabricRegistryFactory());
+        DeferredHelper.setDataMapFactory(new FabricDataMaps());
+        FabricDataMaps.registerReloadListener();
         IngredientType.setImpl(new FabricIngredients());
 
         // Vanilla hands out an immutable map and Placebo adds named colours to it. The access widener makes

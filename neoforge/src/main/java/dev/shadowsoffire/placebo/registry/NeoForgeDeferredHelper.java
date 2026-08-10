@@ -68,7 +68,7 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
      * Fake registry key used only to build the data map's own ResourceKey. It does not point at a real
      * registry -- NeoForge data maps are not registry entries.
      */
-    private static final ResourceKey<Registry<DataMapType<?, ?>>> DATA_MAP_KEY =
+    static final ResourceKey<Registry<DataMapType<?, ?>>> DATA_MAP_KEY =
         ResourceKey.createRegistryKey(Identifier.fromNamespaceAndPath(NeoForgeMod.MOD_ID, "data_map_type"));
 
     /** Registries staged for the {@link NewRegistryEvent}. */
@@ -123,28 +123,6 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
     public <T extends IGlobalLootModifier> MapCodec<T> lootModifier(String path, MapCodec<T> codec) {
         this.register(path, NeoForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, () -> codec);
         return codec;
-    }
-
-    /**
-     * Creates and returns a {@link DataMapType} for the {@code targetRegistry}.
-     * <p>
-     * The data map type will be automatically registered during the {@link RegisterDataMapTypesEvent}.
-     *
-     * @param <K>            The key type of the data map, which is also the type of the target registry.
-     * @param <V>            The value type of the data map.
-     * @param path           The path of the resource location for the data map type. The map will always use the {@link #modid} as the namespace.
-     * @param targetRegistry The registry that the data map is for.
-     * @param codec          The codec used to de/serialize the data map objects.
-     * @param config         A builder config used to specify other values.
-     * @return The newly created data map type.
-     */
-    @SuppressWarnings("unchecked") // DataMapType has a bug in that it expects ResourceKey<Registry<K>> instead of ? extends Registry.
-    public <K, V> DataMapType<K, V> dataMap(String path, ResourceKey<? extends Registry<K>> targetRegistry, Codec<V> codec, UnaryOperator<DataMapType.Builder<V, K>> config) {
-        Identifier id = Identifier.fromNamespaceAndPath(this.modid, path);
-        ResourceKey<? extends DataMapType<?, ?>> registryKey = ResourceKey.create(DATA_MAP_KEY, id);
-        DataMapType<K, V> dataMapType = config.apply(DataMapType.builder(id, (ResourceKey<Registry<K>>) targetRegistry, codec)).build();
-        this.registerDataMap(registryKey, dataMapType);
-        return dataMapType;
     }
 
     /**

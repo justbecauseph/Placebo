@@ -14,6 +14,7 @@ import dev.shadowsoffire.placebo.attachment.NeoForgeDataAttachment;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.shadowsoffire.placebo.registry.NeoForgeIngredients;
+import dev.shadowsoffire.placebo.registry.NeoForgeDataMaps;
 import dev.shadowsoffire.placebo.registry.NeoForgeRegistryFactory;
 import dev.shadowsoffire.placebo.registry.NeoForgeDeferredHelper;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
@@ -59,6 +60,7 @@ public class PlaceboNeoForge {
         NeoForgeDynReg.install();
         DeferredHelper.setFactory(NeoForgeDeferredHelper::new);
         DeferredHelper.setRegistryFactory(new NeoForgeRegistryFactory());
+        DeferredHelper.setDataMapFactory(new NeoForgeDataMaps());
         IngredientType.setImpl(new NeoForgeIngredients());
         NeoForge.EVENT_BUS.register(new NeoForgeEventBridge());
         NeoForge.EVENT_BUS.addListener(this::registerCommands);

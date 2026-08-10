@@ -29,6 +29,8 @@ import net.minecraft.advancements.triggers.CriterionTrigger;
 import dev.architectury.registry.registries.DeferredRegister;
 import dev.shadowsoffire.placebo.attachment.DataAttachment;
 import dev.shadowsoffire.placebo.crafting.CustomIngredient;
+import dev.shadowsoffire.placebo.datamap.DataMap;
+import dev.shadowsoffire.placebo.datamap.DataMapSpec;
 import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.architectury.registry.registries.RegistrySupplier;
 import net.minecraft.core.Holder;
@@ -209,6 +211,41 @@ public class DeferredHelper {
     public <T extends CustomIngredient> IngredientType<T> ingredient(String path, IngredientType<T> type) {
         IngredientType.register(this, Identifier.fromNamespaceAndPath(this.modid, path), type);
         return type;
+    }
+
+    /**
+     * Declares a {@link DataMap} attaching {@code codec}-shaped values to entries of {@code targetRegistry},
+     * loaded from {@code data/<modid>/data_maps/<registry>/<path>.json}.
+     */
+    public <K, V> DataMap<K, V> dataMap(String path, ResourceKey<? extends Registry<K>> targetRegistry,
+        Codec<V> codec, UnaryOperator<DataMapSpec<K, V>> config) {
+        Identifier id = Identifier.fromNamespaceAndPath(this.modid, path);
+        return DATA_MAP_FACTORY.create(this, id, config.apply(new DataMapSpec<>(targetRegistry, codec)));
+    }
+
+    /**
+     * Platform factory for {@link #dataMap}.
+     */
+    private static DataMapFactory DATA_MAP_FACTORY = new DataMapFactory() {
+
+        @Override
+        public <K, V> DataMap<K, V> create(DeferredHelper owner, Identifier id, DataMapSpec<K, V> spec) {
+            throw new IllegalStateException("No data map factory installed; the platform entrypoint must "
+                + "call DeferredHelper.setDataMapFactory before any data map is declared.");
+        }
+    };
+
+    public static void setDataMapFactory(DataMapFactory factory) {
+        DATA_MAP_FACTORY = java.util.Objects.requireNonNull(factory);
+    }
+
+    public interface DataMapFactory {
+
+        /**
+         * @param owner The helper the declaration came from. NeoForge's data map types are announced from
+         *              that helper's own {@code RegisterDataMapTypesEvent} listener.
+         */
+        <K, V> DataMap<K, V> create(DeferredHelper owner, Identifier id, DataMapSpec<K, V> spec);
     }
 
     /**
