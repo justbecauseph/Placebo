@@ -23,8 +23,8 @@ import net.minecraft.world.level.ChunkPos;
  * touching one from here would load client code on a dedicated server. Those call sites are all client-side
  * already, so they get their own sender once these repos have client source sets.
  * <p>
- * Deliberately separate from {@code PayloadHelper}: that class locks itself once the platform has drained it,
- * and mixing a runtime send API into a startup-time registry invites calling the wrong one at the wrong time.
+ * Deliberately separate from {@code PayloadHelper}: mixing a runtime send API into a startup-time registry
+ * invites calling the wrong one at the wrong time.
  */
 public class PayloadSender {
 

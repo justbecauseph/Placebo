@@ -53,10 +53,9 @@ import net.minecraft.world.entity.Mob;
  * </table>
  *
  * <h2>Registration ordering</h2>
- * {@link PayloadHelper#drain} locks registration, so this initializer must run after every mod that registers
- * payloads. Fabric orders {@code main} entrypoints by mod dependency, and Placebo's dependents all depend on
- * it -- so a downstream mod registering from its own initializer runs first. A mod registering later now
- * throws rather than being silently dropped, which is the intent.
+ * Fabric runs dependency entrypoints first, so this initializer installs an immediate payload registrar.
+ * Placebo's providers and providers added later by dependent mods therefore reach Fabric's registries in the
+ * same initializer that declares them.
  */
 public class PlaceboFabric implements ModInitializer {
 
@@ -81,8 +80,11 @@ public class PlaceboFabric implements ModInitializer {
         // Installs the dynreg hooks, including the datapack-sync listener.
         FabricDynReg.install();
 
-        // Placebo's own dynamic-registry payloads. These MUST be registered before the drain below -- that
-        // ordering is the entire reason registration and flushing are two phases.
+        // Fabric initializes Placebo before its dependents. Register providers immediately so dependent mods
+        // can keep using PayloadHelper from their own entrypoints.
+        FabricPayloadRegistrar.install();
+
+        // Placebo's own dynamic-registry and UI payloads.
         PayloadHelper.registerPayload(new DynRegPayloads.Start.Provider());
         PayloadHelper.registerPayload(new DynRegPayloads.Content.Provider<>());
         PayloadHelper.registerPayload(new DynRegPayloads.End.Provider());
@@ -99,11 +101,7 @@ public class PlaceboFabric implements ModInitializer {
         // Creative tab filling. One global listener, so filler registration order does not matter.
         FabricTabFillContext.install();
 
-        // Flush everything registered so far into Fabric's networking API.
-        FabricPayloadRegistrar.register();
-
-        // Outbound dispatch. Separate from the registrar above: that one runs once at startup and locks,
-        // this one is called for the rest of the session.
+        // Outbound dispatch is called for the rest of the session.
         PayloadSender.setImpl(new FabricPayloadSender());
         FakePlayerHelper.setImpl(new FabricFakePlayerHelper());
         MobSpawnHelper.setImpl(new FabricMobSpawnHelper());

@@ -3,6 +3,7 @@ package dev.shadowsoffire.placebo.network;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import com.google.common.base.Preconditions;
 
@@ -11,10 +12,10 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 /**
  * Collects payload providers, loader-neutrally.
  * <p>
- * Registration is two-phase and always was: mods call {@link #registerPayload} during setup, and the platform
- * later flushes everything into its own network registry. Only that flush is loader-specific, so it lives in
- * {@code NeoForgePayloadRegistrar} / {@code FabricPayloadRegistrar}; the bookkeeping and the duplicate/late
- * registration checks are shared.
+ * NeoForge registration is two-phase: mods collect providers during setup and its payload event later drains
+ * them. Fabric initializes dependencies before dependents, so Placebo cannot drain during its own initializer;
+ * its platform bridge installs an immediate registrar instead and every later provider is registered as it is
+ * added. Duplicate checking remains shared.
  * <p>
  * Keeping this class and its signature is deliberate: every downstream mod calls
  * {@code PayloadHelper.registerPayload(...)}, and none of them needs to change.
@@ -22,6 +23,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 public class PayloadHelper {
 
     private static final Map<CustomPacketPayload.Type<?>, PayloadProvider<?>> ALL_PROVIDERS = new HashMap<>();
+    private static Consumer<PayloadProvider<?>> immediateRegistrar;
     private static boolean locked = false;
 
     /**
@@ -39,6 +41,24 @@ public class PayloadHelper {
                 throw new UnsupportedOperationException("Attempted to register payload provider with duplicate ID: " + prov.getType().id());
             }
             ALL_PROVIDERS.put(prov.getType(), prov);
+            if (immediateRegistrar != null) {
+                immediateRegistrar.accept(prov);
+            }
+        }
+    }
+
+    /**
+     * Installs a platform registrar that receives existing providers and every provider registered later.
+     * Fabric uses this because dependency entrypoints run before the mods that depend on them.
+     */
+    public static void setImmediateRegistrar(Consumer<PayloadProvider<?>> registrar) {
+        Preconditions.checkNotNull(registrar);
+        synchronized (ALL_PROVIDERS) {
+            if (locked || immediateRegistrar != null) {
+                throw new IllegalStateException("A payload registrar has already been installed or registration has finished.");
+            }
+            immediateRegistrar = registrar;
+            ALL_PROVIDERS.values().forEach(registrar);
         }
     }
 
@@ -50,6 +70,9 @@ public class PayloadHelper {
      */
     public static Collection<PayloadProvider<?>> drain() {
         synchronized (ALL_PROVIDERS) {
+            if (immediateRegistrar != null) {
+                throw new IllegalStateException("Payload providers are already being registered immediately.");
+            }
             locked = true;
             return java.util.List.copyOf(ALL_PROVIDERS.values());
         }

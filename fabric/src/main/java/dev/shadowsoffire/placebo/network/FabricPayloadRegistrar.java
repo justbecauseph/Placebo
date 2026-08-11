@@ -9,7 +9,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.entity.player.Player;
 
 /**
- * Flushes {@link PayloadHelper}'s providers into Fabric's networking API. Counterpart to
+ * Registers {@link PayloadHelper}'s providers with Fabric's networking API. Counterpart to
  * {@code NeoForgePayloadRegistrar}.
  * <p>
  * Two differences from NeoForge worth knowing:
@@ -26,20 +26,22 @@ public class FabricPayloadRegistrar {
 
     private FabricPayloadRegistrar() {}
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    public static void register() {
-        for (PayloadProvider prov : PayloadHelper.drain()) {
-            PacketFlow flow = (PacketFlow) prov.getFlow().orElse(null);
+    public static void install() {
+        PayloadHelper.setImmediateRegistrar(FabricPayloadRegistrar::register);
+    }
 
-            if (flow == null || flow == PacketFlow.CLIENTBOUND) {
-                PayloadTypeRegistry.clientboundPlay().register(prov.getType(), prov.getCodec());
-                registerClient(prov);
-            }
-            if (flow == null || flow == PacketFlow.SERVERBOUND) {
-                PayloadTypeRegistry.serverboundPlay().register(prov.getType(), prov.getCodec());
-                ServerPlayNetworking.registerGlobalReceiver(prov.getType(),
-                    (payload, ctx) -> prov.handleServer(payload, new ServerContext(ctx)));
-            }
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public static void register(PayloadProvider prov) {
+        PacketFlow flow = (PacketFlow) prov.getFlow().orElse(null);
+
+        if (flow == null || flow == PacketFlow.CLIENTBOUND) {
+            PayloadTypeRegistry.clientboundPlay().register(prov.getType(), prov.getCodec());
+            registerClient(prov);
+        }
+        if (flow == null || flow == PacketFlow.SERVERBOUND) {
+            PayloadTypeRegistry.serverboundPlay().register(prov.getType(), prov.getCodec());
+            ServerPlayNetworking.registerGlobalReceiver(prov.getType(),
+                (payload, ctx) -> prov.handleServer(payload, new ServerContext(ctx)));
         }
     }
 
