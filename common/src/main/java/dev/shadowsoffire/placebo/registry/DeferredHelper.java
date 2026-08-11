@@ -20,19 +20,22 @@ import org.jetbrains.annotations.Nullable;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.MapCodec;
 
-import dev.shadowsoffire.placebo.Placebo;
-import dev.shadowsoffire.placebo.block_entity.TickingBlockEntity;
-import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType;
-import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType.TickSide;
-import dev.shadowsoffire.placebo.util.DeferredSet;
-import net.minecraft.advancements.triggers.CriterionTrigger;
+import dev.architectury.registry.menu.MenuRegistry.ExtendedMenuTypeFactory;
 import dev.architectury.registry.registries.DeferredRegister;
+import dev.architectury.registry.registries.RegistrySupplier;
+import dev.shadowsoffire.placebo.Placebo;
 import dev.shadowsoffire.placebo.attachment.DataAttachment;
+import dev.shadowsoffire.placebo.block_entity.TickingBlockEntity;
+import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType.TickSide;
+import dev.shadowsoffire.placebo.block_entity.TickingBlockEntityType;
 import dev.shadowsoffire.placebo.crafting.CustomIngredient;
+import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.shadowsoffire.placebo.datamap.DataMap;
 import dev.shadowsoffire.placebo.datamap.DataMapSpec;
-import dev.shadowsoffire.placebo.crafting.IngredientType;
-import dev.architectury.registry.registries.RegistrySupplier;
+import dev.shadowsoffire.placebo.menu.MenuUtil.PosFactory;
+import dev.shadowsoffire.placebo.menu.MenuUtil;
+import dev.shadowsoffire.placebo.util.DeferredSet;
+import net.minecraft.advancements.triggers.CriterionTrigger;
 import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
@@ -54,14 +57,14 @@ import net.minecraft.stats.Stats;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntityType.EntityFactory;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.RangedAttribute;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.MenuType.MenuSupplier;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
@@ -72,8 +75,8 @@ import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.BlockEntityType.BlockEntitySupplier;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.configurations.FeatureConfiguration;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureProcessor;
@@ -477,15 +480,70 @@ public class DeferredHelper {
     /**
      * Registers a {@link MenuType} for a menu that needs no data beyond the player's inventory.
      * <p>
-     * Vanilla's own constructor, so this needed no platform half. The forms that carry extra data --
-     * {@code menuWithPos} and {@code menuWithData} -- still do: NeoForge passes a raw buffer through
-     * {@code IContainerFactory}, Fabric a typed payload through {@code ExtendedScreenHandlerType}, and the
-     * two disagree about more than a name.
+     * Vanilla's own constructor, so this needed no platform half -- and neither, it turned out, do the forms
+     * that carry extra data. See {@link #menuWithPos}.
      */
     public <T extends AbstractContainerMenu> MenuType<T> menu(String path, MenuSupplier<T> factory) {
         MenuType<T> type = new MenuType<>(factory, net.minecraft.world.flag.FeatureFlags.DEFAULT_FLAGS);
         this.menuType(path, type);
         return type;
+    }
+
+    /**
+     * Registers a {@link BlockEntityType} from a supplier of its valid blocks.
+     * <p>
+     * <b>Deferred on purpose.</b> The eager overloads this replaces built the {@link BlockEntityType} in the
+     * static initializer that declared it, which cannot work on Fabric: the constructor calls
+     * {@code createIntrusiveHolder} on {@code BuiltInRegistries.BLOCK_ENTITY_TYPE}, and vanilla's
+     * {@code freeze()} has already discarded the map that needs. NeoForge gets away with it by patching
+     * {@code freeze} to keep the map and adding {@code MappedRegistry#unfreeze}; vanilla has neither.
+     * <p>
+     * Building the type at registration time instead needs no unfreeze on either loader, and it also disposes
+     * of {@code DeferredSet} and the {@code getValidBlocks()} call that existed only to force it -- the
+     * supplier is simply resolved here, where the blocks do exist.
+     */
+    public <T extends BlockEntity> RegistrySupplier<BlockEntityType<T>> blockEntity(String path, BlockEntitySupplier<T> factory, Supplier<Set<Block>> validBlocks) {
+        return this.register(path, Registries.BLOCK_ENTITY_TYPE, () -> new BlockEntityType<>(factory, validBlocks.get()));
+    }
+
+    /**
+     * Registers a {@link BlockEntityType} from a vararg array of block suppliers.
+     * <p>
+     * Suppliers rather than {@link net.minecraft.core.Holder}s: {@code asHolder()} returns null until
+     * registration has run, and these calls sit in static initializers.
+     */
+    @SafeVarargs
+    public final <T extends BlockEntity> RegistrySupplier<BlockEntityType<T>> blockEntity(String path, BlockEntitySupplier<T> factory, Supplier<? extends Block>... validBlocks) {
+        return this.blockEntity(path, factory, () -> Arrays.stream(validBlocks).map(Supplier::get).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Registers a {@link TickingBlockEntityType} from a vararg array of block suppliers. Deferred for the same
+     * reason as {@link #blockEntity(String, BlockEntitySupplier, Supplier)}.
+     */
+    @SafeVarargs
+    public final <T extends BlockEntity & TickingBlockEntity> RegistrySupplier<TickingBlockEntityType<T>> tickingBlockEntity(String path, BlockEntitySupplier<T> factory, TickSide side, Supplier<? extends Block>... validBlocks) {
+        return this.register(path, Registries.BLOCK_ENTITY_TYPE,
+            () -> new TickingBlockEntityType<>(factory, Arrays.stream(validBlocks).map(Supplier::get).collect(Collectors.toSet()), side));
+    }
+
+    /**
+     * Registers a {@link MenuType} for a menu whose extra data is a {@link net.minecraft.core.BlockPos}.
+     * <p>
+     * This was filed as a genuine two-sided seam, on the strength of NeoForge passing a raw buffer through
+     * {@code IContainerFactory} and Fabric a typed payload through {@code ExtendedScreenHandlerType}. That is
+     * true of the raw Fabric API and irrelevant here: Architectury bridges it and is already a dependency, so
+     * both halves are common. Checking the abstraction layer already in the build would have cost a minute.
+     */
+    public <T extends AbstractContainerMenu> MenuType<T> menuWithPos(String path, PosFactory<T> factory) {
+        return this.menuType(path, MenuUtil.posType(factory));
+    }
+
+    /**
+     * Registers a {@link MenuType} for a menu that reads arbitrary extra data from the opening buffer.
+     */
+    public <T extends AbstractContainerMenu> MenuType<T> menuWithData(String path, ExtendedMenuTypeFactory<T> factory) {
+        return this.menuType(path, MenuUtil.bufType(factory));
     }
 
     /**
