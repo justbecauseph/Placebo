@@ -5,6 +5,8 @@ package dev.shadowsoffire.placebo.registry;
 import com.mojang.serialization.MapCodec;
 
 import dev.architectury.platform.hooks.EventBusesHooks;
+import dev.shadowsoffire.placebo.loot.LootModifier;
+import dev.shadowsoffire.placebo.loot.NeoForgeLootModifier;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
@@ -15,7 +17,6 @@ import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForgeMod;
-import net.neoforged.neoforge.common.loot.IGlobalLootModifier;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
 import net.neoforged.neoforge.registries.RegistryBuilder;
@@ -86,9 +87,10 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
     /**
      * Registers a codec for an {@link IGlobalLootModifier} and returns it.
      */
-    public <T extends IGlobalLootModifier> MapCodec<T> lootModifier(String path, MapCodec<T> codec) {
-        this.register(path, NeoForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, () -> codec);
-        return codec;
+    @Override
+    protected void registerLootModifier(Identifier id, MapCodec<? extends LootModifier> codec) {
+        MapCodec<NeoForgeLootModifier> wrapped = NeoForgeLootModifier.wrap(codec);
+        this.register(id.getPath(), NeoForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, () -> wrapped);
     }
 
 

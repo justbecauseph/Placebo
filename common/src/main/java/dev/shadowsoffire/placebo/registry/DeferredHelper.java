@@ -32,6 +32,8 @@ import dev.shadowsoffire.placebo.crafting.CustomIngredient;
 import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.shadowsoffire.placebo.datamap.DataMap;
 import dev.shadowsoffire.placebo.datamap.DataMapSpec;
+import dev.shadowsoffire.placebo.loot.LootModifier;
+import dev.shadowsoffire.placebo.loot.LootModifierTypes;
 import dev.shadowsoffire.placebo.menu.MenuUtil.PosFactory;
 import dev.shadowsoffire.placebo.menu.MenuUtil;
 import dev.shadowsoffire.placebo.util.DeferredSet;
@@ -488,6 +490,28 @@ public class DeferredHelper {
         this.menuType(path, type);
         return type;
     }
+
+    /**
+     * Registers a codec for a {@link LootModifier} and returns it, so the declaration can be a single
+     * assignment.
+     * <p>
+     * The two loaders diverge entirely below this line and not at all above it. NeoForge has a registry of
+     * serializers, a datapack loader and an ordering pass; Fabric has none of them, so Placebo reads the same
+     * JSON and runs the modifiers on {@code LootTableEvents.MODIFY_DROPS}. Callers see one method either way.
+     */
+    public <T extends LootModifier> MapCodec<T> lootModifier(String path, MapCodec<T> codec) {
+        Identifier id = Identifier.fromNamespaceAndPath(this.modid, path);
+        LootModifierTypes.register(id, codec);
+        this.registerLootModifier(id, codec);
+        return codec;
+    }
+
+    /**
+     * The platform half of {@link #lootModifier}. NeoForge stages the codec into its serializer registry;
+     * Fabric needs nothing here, because {@link LootModifierTypes} is already the dispatch table its loader
+     * reads.
+     */
+    protected void registerLootModifier(Identifier id, MapCodec<? extends LootModifier> codec) {}
 
     /**
      * Registers a {@link BlockEntityType} from a supplier of its valid blocks.

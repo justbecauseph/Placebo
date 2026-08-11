@@ -11,6 +11,7 @@ import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.FabricDynReg;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
+import dev.shadowsoffire.placebo.loot.FabricLootModifiers;
 import dev.shadowsoffire.placebo.network.FabricPayloadRegistrar;
 import dev.shadowsoffire.placebo.network.FabricPayloadSender;
 import dev.shadowsoffire.placebo.network.PayloadHelper;
@@ -67,6 +68,9 @@ public class PlaceboFabric implements ModInitializer {
         DeferredHelper.setRegistryFactory(new FabricRegistryFactory());
         DeferredHelper.setDataMapFactory(new FabricDataMaps());
         FabricDataMaps.registerReloadListener();
+        // Global loot modifiers: NeoForge has a whole subsystem, Fabric has none, so Placebo reads the
+        // same JSON and applies it on LootTableEvents.MODIFY_DROPS.
+        FabricLootModifiers.install();
         IngredientType.setImpl(new FabricIngredients());
 
         // Vanilla hands out an immutable map and Placebo adds named colours to it. The access widener makes
