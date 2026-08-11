@@ -3,12 +3,14 @@ package dev.shadowsoffire.placebo.events;
 import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.neoforge.event.ItemStackedOnOtherEvent;
 import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
+import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent;
 import net.neoforged.neoforge.event.entity.living.MobDespawnEvent;
 import net.neoforged.neoforge.event.entity.living.MobSplitEvent;
 
@@ -101,6 +103,24 @@ public class NeoForgeEventBridge {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public void invulnerabilityCheck(EntityInvulnerabilityCheckEvent e) {
         e.setInvulnerable(PlaceboEvents.fireInvulnerabilityCheck(e.getEntity(), e.getSource(), e.isInvulnerable()));
+    }
+
+    @SubscribeEvent
+    public void shieldBlock(LivingShieldBlockEvent e) {
+        e.setBlockedDamage(PlaceboEvents.fireShieldBlock(e.getEntity(), e.getDamageSource(), e.getBlockedDamage()));
+    }
+
+    /**
+     * The common event's interrupt maps onto cancellation; NeoForge's separate "cancellation result" is left at
+     * its default of true, which is what cancelling meant for every handler that moved here.
+     */
+    @SubscribeEvent
+    public void itemStackedOnOther(ItemStackedOnOtherEvent e) {
+        boolean handled = PlaceboEvents.fireItemStackedOnOther(e.getCarriedItem(), e.getStackedOnItem(), e.getSlot(),
+            e.getClickAction(), e.getPlayer(), e.getCarriedSlotAccess());
+        if (handled) {
+            e.setCanceled(true);
+        }
     }
 
 }

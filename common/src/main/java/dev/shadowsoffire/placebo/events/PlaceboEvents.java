@@ -13,7 +13,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.SlotAccess;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ClickAction;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemInstance;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
@@ -558,6 +561,168 @@ public class PlaceboEvents {
         InvulnerabilityContext ctx = new InvulnerabilityContext(entity, source, invulnerable);
         ENTITY_INVULNERABILITY_CHECK.invoker().check(ctx);
         return ctx.isInvulnerable();
+    }
+
+    /**
+     * Fired when a {@link LivingEntity} blocks an attack with an item, after vanilla has worked out how much of
+     * the damage the item absorbs and before that figure is used.
+     * <p>
+     * NeoForge counterpart: {@code LivingShieldBlockEvent}. Vanilla site: {@code LivingEntity#applyItemBlocking},
+     * around the single {@code BlocksAttacks#resolveBlockedDamage} call.
+     * <p>
+     * <b>The block itself cannot be prevented, only resized.</b> NeoForge's event can also turn the block off
+     * entirely and choose how much durability the item loses — both of which reach into its own damage pipeline,
+     * and neither of which any handler in this stack uses. Sizing to what they do use keeps this a value the
+     * two loaders can agree on.
+     */
+    public static final Event<ShieldBlock> LIVING_SHIELD_BLOCK = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface ShieldBlock {
+        void block(ShieldBlockContext ctx);
+    }
+
+    /**
+     * Mutable state for {@link #LIVING_SHIELD_BLOCK}.
+     */
+    public static final class ShieldBlockContext {
+
+        private final LivingEntity entity;
+        private final DamageSource source;
+        private final float originalBlockedDamage;
+        private float blockedDamage;
+
+        public ShieldBlockContext(LivingEntity entity, DamageSource source, float blockedDamage) {
+            this.entity = entity;
+            this.source = source;
+            this.originalBlockedDamage = blockedDamage;
+            this.blockedDamage = blockedDamage;
+        }
+
+        /**
+         * The entity doing the blocking. Its {@code getUseItem} is the blocking item.
+         */
+        public LivingEntity getEntity() {
+            return this.entity;
+        }
+
+        public DamageSource getDamageSource() {
+            return this.source;
+        }
+
+        /**
+         * How much vanilla decided the item absorbs, before any listener changed it.
+         */
+        public float getOriginalBlockedDamage() {
+            return this.originalBlockedDamage;
+        }
+
+        public float getBlockedDamage() {
+            return this.blockedDamage;
+        }
+
+        public void setBlockedDamage(float blockedDamage) {
+            this.blockedDamage = blockedDamage;
+        }
+    }
+
+    /**
+     * Fires {@link #LIVING_SHIELD_BLOCK}. Called by the platform bridge, not by mods.
+     *
+     * @return how much damage the blocking item absorbs, after listeners have run.
+     */
+    public static float fireShieldBlock(LivingEntity entity, DamageSource source, float blockedDamage) {
+        ShieldBlockContext ctx = new ShieldBlockContext(entity, source, blockedDamage);
+        LIVING_SHIELD_BLOCK.invoker().block(ctx);
+        return ctx.getBlockedDamage();
+    }
+
+    /**
+     * Fired when one item is clicked onto another in a container slot, before vanilla's own stacking behaviour
+     * runs, so that listeners can define what combining the two means.
+     * <p>
+     * NeoForge counterpart: {@code ItemStackedOnOtherEvent}. Vanilla site:
+     * {@code AbstractContainerMenu#tryItemClickBehaviourOverride}, at HEAD.
+     * <p>
+     * <b>Interrupting means "handled".</b> A listener that acts on the pair returns
+     * {@link EventResult#interruptTrue()}, which stops both the remaining listeners and vanilla's own handling —
+     * the same thing NeoForge's cancellation does, and the reason this is an interrupting event where most of
+     * the others here are loops. NeoForge additionally lets a listener choose the boolean the vanilla method
+     * returns; it defaults to {@code true} and nothing in this stack sets it.
+     */
+    public static final Event<ItemStackedOnOther> ITEM_STACKED_ON_OTHER = EventFactory.createEventResult();
+
+    @FunctionalInterface
+    public interface ItemStackedOnOther {
+        EventResult stackedOn(ItemStackedOnOtherContext ctx);
+    }
+
+    /**
+     * State for {@link #ITEM_STACKED_ON_OTHER}. Nothing here is settable — a listener acts through the slot and
+     * the carried-slot access, then reports that it handled the click.
+     */
+    public static final class ItemStackedOnOtherContext {
+
+        private final ItemStack carriedItem;
+        private final ItemStack stackedOnItem;
+        private final Slot slot;
+        private final ClickAction clickAction;
+        private final Player player;
+        private final SlotAccess carriedSlotAccess;
+
+        public ItemStackedOnOtherContext(ItemStack carriedItem, ItemStack stackedOnItem, Slot slot,
+            ClickAction clickAction, Player player, SlotAccess carriedSlotAccess) {
+            this.carriedItem = carriedItem;
+            this.stackedOnItem = stackedOnItem;
+            this.slot = slot;
+            this.clickAction = clickAction;
+            this.player = player;
+            this.carriedSlotAccess = carriedSlotAccess;
+        }
+
+        /**
+         * The stack under the cursor — the one being placed onto the other.
+         */
+        public ItemStack getCarriedItem() {
+            return this.carriedItem;
+        }
+
+        /**
+         * The stack already in the slot.
+         */
+        public ItemStack getStackedOnItem() {
+            return this.stackedOnItem;
+        }
+
+        public Slot getSlot() {
+            return this.slot;
+        }
+
+        public ClickAction getClickAction() {
+            return this.clickAction;
+        }
+
+        public Player getPlayer() {
+            return this.player;
+        }
+
+        /**
+         * Write access to the carried stack, for a listener that consumes or replaces it.
+         */
+        public SlotAccess getCarriedSlotAccess() {
+            return this.carriedSlotAccess;
+        }
+    }
+
+    /**
+     * Fires {@link #ITEM_STACKED_ON_OTHER}. Called by the platform bridge, not by mods.
+     *
+     * @return true if a listener handled the click and vanilla should not.
+     */
+    public static boolean fireItemStackedOnOther(ItemStack carriedItem, ItemStack stackedOnItem, Slot slot,
+        ClickAction clickAction, Player player, SlotAccess carriedSlotAccess) {
+        ItemStackedOnOtherContext ctx = new ItemStackedOnOtherContext(carriedItem, stackedOnItem, slot, clickAction, player, carriedSlotAccess);
+        return ITEM_STACKED_ON_OTHER.invoker().stackedOn(ctx).isTrue();
     }
 
 }
