@@ -3,7 +3,6 @@ package dev.shadowsoffire.placebo.util;
 import java.util.ArrayList;
 import java.util.List;
 
-import dev.shadowsoffire.placebo.mixin.client.AbstractContainerScreenMixin;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.tooltip.ClientTooltipComponent;
@@ -11,13 +10,11 @@ import net.minecraft.client.gui.screens.inventory.tooltip.DefaultTooltipPosition
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
-import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.client.ClientHooks;
 
 /**
  * Implement this on a screen class to be able to call {@link #drawOnLeft(GuiGraphicsExtractor, List, int)}
  * <p>
- * Applied to all screens via {@link AbstractContainerScreenMixin}.
+ * Applied to all screens via {@code AbstractContainerScreenMixin}.
  */
 public interface DrawsOnLeft {
 
@@ -28,10 +25,10 @@ public interface DrawsOnLeft {
      */
     default void drawOnLeft(GuiGraphicsExtractor gfx, List<? extends FormattedText> list, int y) {
         if (list.isEmpty()) return;
-        int xPos = __ths().getLeftPos() - 16 - list.stream().map(__ths().font::width).max(Integer::compare).get();
+        int xPos = __ths().leftPos - 16 - list.stream().map(__ths().font::width).max(Integer::compare).get();
         int maxWidth = 9999;
         if (xPos < 0) {
-            maxWidth = __ths().getLeftPos() - 6;
+            maxWidth = __ths().leftPos - 6;
             xPos = -8;
         }
 
@@ -59,12 +56,12 @@ public interface DrawsOnLeft {
             __ths().font.getSplitter().splitLines(text, maxWidth, style, (splitLine, isBlank) -> split.add(splitLine));
         });
 
-        int xPos = __ths().getLeftPos() - 16 - split.stream().map(__ths().font::width).max(Integer::compare).get();
+        int xPos = __ths().leftPos - 16 - split.stream().map(__ths().font::width).max(Integer::compare).get();
         this.submitTooltip(gfx, split, xPos, y);
     }
 
     private void submitTooltip(GuiGraphicsExtractor gfx, List<FormattedText> split, int xPos, int y) {
-        List<ClientTooltipComponent> lines = ClientHooks.gatherTooltipComponents(ItemStack.EMPTY, split, xPos, gfx.guiWidth(), gfx.guiHeight(), __ths().font);
+        List<ClientTooltipComponent> lines = TooltipComponents.gather(split, xPos, gfx.guiWidth(), gfx.guiHeight(), __ths().font);
         gfx.tooltip(__ths().font, lines, xPos, y, DefaultTooltipPositioner.INSTANCE, null);
     }
 

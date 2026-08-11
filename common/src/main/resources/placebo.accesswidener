@@ -31,6 +31,8 @@ mutable	field	net/minecraft/world/item/alchemy/PotionBrewing	containerMixes	Ljav
 accessible	class	net/minecraft/world/item/alchemy/PotionBrewing$Mix
 
 accessible	field	net/minecraft/client/gui/screens/Screen	font	Lnet/minecraft/client/gui/Font;
+# NeoForge adds getLeftPos(); vanilla has only the protected field, so DrawsOnLeft reads that.
+accessible	field	net/minecraft/client/gui/screens/inventory/AbstractContainerScreen	leftPos	I
 accessible	method	net/minecraft/world/item/alchemy/PotionBrewing$Mix	<init>	(Lnet/minecraft/core/Holder;Lnet/minecraft/world/item/crafting/Ingredient;Lnet/minecraft/core/Holder;)V
 
 # NeoForge widens these; common compiles against the un-patched jar and needs them explicitly.

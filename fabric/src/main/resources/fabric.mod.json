@@ -12,6 +12,9 @@
   "entrypoints": {
     "main": [
       "dev.shadowsoffire.placebo.PlaceboFabric"
+    ],
+    "client": [
+      "dev.shadowsoffire.placebo.PlaceboFabricClient"
     ]
   },
   "accessWidener": "placebo.accesswidener",

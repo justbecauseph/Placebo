@@ -2,8 +2,8 @@ package dev.shadowsoffire.placebo.color;
 
 import dev.shadowsoffire.placebo.PlaceboClient;
 import net.minecraft.network.chat.TextColor;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.loading.FMLEnvironment;
+import dev.architectury.platform.Platform;
+import dev.architectury.utils.Env;
 
 public class GradientColor extends TextColor {
 
@@ -42,7 +42,7 @@ public class GradientColor extends TextColor {
 
     @Override
     public int getValue() {
-        if (FMLEnvironment.getDist() == Dist.CLIENT) {
+        if (Platform.getEnvironment() == Env.CLIENT) {
             return this.gradient[(int) (PlaceboClient.getColorTicks() * this.speed % this.gradient.length)];
         }
         return super.getValue();
