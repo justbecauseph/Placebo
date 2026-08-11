@@ -14,6 +14,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -954,6 +955,38 @@ public class PlaceboEvents {
         FinalizeSpawnContext ctx = new FinalizeSpawnContext(mob, level, spawnType);
         FINALIZE_SPAWN.invoker().finalizeSpawn(ctx);
         return ctx.isCanceled();
+    }
+
+    /**
+     * Fired when the item in one of a {@link LivingEntity}'s equipment slots has changed.
+     * <p>
+     * NeoForge counterpart: {@code LivingEquipmentChangeEvent}. Vanilla site:
+     * {@code LivingEntity#collectEquipmentChanges}.
+     * <p>
+     * <b>Fabric has no equivalent</b>, despite {@code ServerLivingEntityEvents} looking like the place for one —
+     * checked against the 26.2 checkout, which has allow/after damage, allow/after death and mob conversion,
+     * and nothing about equipment.
+     * <p>
+     * <b>Fires per changed slot, after the whole sweep rather than during it.</b> NeoForge posts from inside the
+     * loop, so its listeners can see an entity halfway through updating. Hooking the returned map instead needs
+     * no access to the loop's locals — which matters at 26.2, where the jar carries no local variable table —
+     * and nothing that could observe the difference does.
+     * <p>
+     * The previous stack is not on the context. NeoForge's event carries it; the one handler in this stack reads
+     * the slot and the new stack only.
+     */
+    public static final Event<EquipmentChange> LIVING_EQUIPMENT_CHANGE = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface EquipmentChange {
+        void changed(LivingEntity entity, EquipmentSlot slot, ItemStack to);
+    }
+
+    /**
+     * Fires {@link #LIVING_EQUIPMENT_CHANGE} once per changed slot. Called by the platform bridge, not by mods.
+     */
+    public static void fireEquipmentChange(LivingEntity entity, EquipmentSlot slot, ItemStack to) {
+        LIVING_EQUIPMENT_CHANGE.invoker().changed(entity, slot, to);
     }
 
 }

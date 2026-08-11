@@ -8,6 +8,7 @@ import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.entity.living.LivingEquipmentChangeEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
@@ -119,6 +120,11 @@ public class NeoForgeEventBridge {
      * At {@code HIGH} without {@code receiveCanceled}, matching every handler that moved here: none of them
      * received cancelled events, so a third-party cancel keeps the whole common chain out exactly as before.
      */
+    @SubscribeEvent
+    public void equipmentChange(LivingEquipmentChangeEvent e) {
+        PlaceboEvents.fireEquipmentChange(e.getEntity(), e.getSlot(), e.getTo());
+    }
+
     @SubscribeEvent(priority = EventPriority.HIGH)
     public void blockDrops(BlockDropsEvent e) {
         e.setDroppedExperience(PlaceboEvents.fireBlockDrops(e.getLevel(), e.getPos(), e.getState(), e.getBreaker(),
