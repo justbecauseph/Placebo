@@ -9,6 +9,8 @@ import org.jetbrains.annotations.Nullable;
 import dev.architectury.registry.ReloadListenerRegistry;
 import dev.shadowsoffire.placebo.registry.FabricDataMaps;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -33,6 +35,8 @@ import net.minecraft.server.packs.PackType;
 public final class FabricDynReg {
 
     private static MinecraftServer server;
+    private static final RegistryAccess.Frozen BUILTIN_LOOKUP =
+        RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY);
 
     private FabricDynReg() {}
 
@@ -51,11 +55,10 @@ public final class FabricDynReg {
     }
 
     private static ReloadContext contextFor(@Nullable DynamicRegistry<?> registry) {
-        if (server == null) {
-            throw new IllegalStateException("A dynamic registry reload was requested with no server running. "
-                + "On Fabric the registry lookup comes from the server, so there is nothing to build a ReloadContext from.");
-        }
-        return new FabricReloadContext(server.registryAccess());
+        // Fabric performs a server-data validation reload while opening the world-selection/create-world
+        // screens, before an integrated server exists. Built-in registries are sufficient for that pass;
+        // the authoritative server reload runs again with the full registry access after SERVER_STARTING.
+        return new FabricReloadContext(server == null ? BUILTIN_LOOKUP : server.registryAccess());
     }
 
     /**
