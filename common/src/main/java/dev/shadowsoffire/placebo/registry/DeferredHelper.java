@@ -644,9 +644,12 @@ public class DeferredHelper {
      */
     public Identifier customStat(String path, StatFormatter formatter) {
         Identifier id = Identifier.fromNamespaceAndPath(this.modid, path);
-        this.register(path, Registries.CUSTOM_STAT, () -> id, key -> {
-            Stats.CUSTOM.get(key, formatter);
-        });
+        RegistrySupplier<Identifier> supplier = this.register(path, Registries.CUSTOM_STAT, () -> id);
+        // A registration supplier is evaluated before Registry.register inserts its value. Running this
+        // through the supplier callback therefore asks Stats.CUSTOM for an identifier whose registry key
+        // is still null on Fabric. Registrar.listen fires after insertion on Fabric and at the equivalent
+        // completed-registration point on NeoForge.
+        supplier.listen(key -> Stats.CUSTOM.get(key, formatter));
         return id;
     }
 

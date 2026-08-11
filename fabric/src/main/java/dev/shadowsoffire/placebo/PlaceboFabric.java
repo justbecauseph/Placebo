@@ -53,17 +53,26 @@ import net.minecraft.world.entity.Mob;
  * </table>
  *
  * <h2>Registration ordering</h2>
- * Fabric runs dependency entrypoints first, so this initializer installs an immediate payload registrar.
- * Placebo's providers and providers added later by dependent mods therefore reach Fabric's registries in the
- * same initializer that declares them.
+ * Dependent entrypoints call {@link #bootstrap()} before touching common registration code because Fabric's
+ * main entrypoint ordering is not a dependency initialization contract.
  */
 public class PlaceboFabric implements ModInitializer {
 
+    private static boolean initialized;
+
     @Override
     public void onInitialize() {
+        bootstrap();
+    }
+
+    /** Installs all Fabric services exactly once, including when a dependent mod initializes first. */
+    public static synchronized void bootstrap() {
+        if (initialized) return;
+        initialized = true;
+
         PlaceboConfig.load();
 
-        // The base DeferredHelper is fully loader-neutral; only the 16 platform-only methods are missing here.
+        // Install the Fabric implementation before any dependent registry hub is initialized.
         DeferredHelper.setFactory(FabricDeferredHelper::new);
         DeferredHelper.setRegistryFactory(new FabricRegistryFactory());
         DeferredHelper.setDataMapFactory(new FabricDataMaps());
