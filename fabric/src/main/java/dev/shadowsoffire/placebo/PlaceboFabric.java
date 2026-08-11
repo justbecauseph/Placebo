@@ -19,6 +19,7 @@ import dev.shadowsoffire.placebo.network.FabricPayloadSender;
 import dev.shadowsoffire.placebo.network.PayloadHelper;
 import dev.shadowsoffire.placebo.network.PayloadSender;
 import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
+import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
 import dev.shadowsoffire.placebo.registry.FabricDataMaps;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
@@ -46,9 +47,6 @@ import net.minecraft.world.entity.Mob;
  *
  * <table>
  * <tr><th>NeoForge does</th><th>Fabric status</th></tr>
- * <tr><td>{@code PatreonDisablePayload}</td>
- * <td>Reaches {@code TrailsManager}/{@code WingsManager}, which are client cosmetics code still in
- * {@code neoforge/}. ({@code ButtonClickPayload} turned out to be fully portable and is registered below.)</td></tr>
  * <tr><td>{@code MixRegistry}</td><td>Platform-side: it reaches into {@code PotionBrewing} internals.</td></tr>
  * <tr><td>{@code GradientColor.RAINBOW}</td><td>Platform-side with the rest of the colour handling.</td></tr>
  * <tr><td>Dynamic tag <em>loading</em></td><td>Needs {@code TagFile.remove()}, a NeoForge added field. Tag <em>syncing</em> works.</td></tr>
@@ -90,6 +88,7 @@ public class PlaceboFabric implements ModInitializer {
         PayloadHelper.registerPayload(new DynRegPayloads.End.Provider());
         PayloadHelper.registerPayload(new TagSyncPayload.Provider());
         PayloadHelper.registerPayload(new ButtonClickPayload.Provider());
+        PayloadHelper.registerPayload(new PatreonDisablePayload.Provider());
 
         // Gear sets are a plain dynamic registry, so they work as soon as dynreg does.
         GearSetRegistry.INSTANCE.registerToBus();

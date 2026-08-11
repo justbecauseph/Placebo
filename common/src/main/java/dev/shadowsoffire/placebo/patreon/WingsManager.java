@@ -13,24 +13,20 @@ import java.util.UUID;
 
 import org.lwjgl.glfw.GLFW;
 
-import com.mojang.blaze3d.platform.InputConstants;
-
 import dev.shadowsoffire.placebo.Placebo;
 import dev.shadowsoffire.placebo.PlaceboClient;
+import dev.shadowsoffire.placebo.network.ClientPayloadSender;
 import dev.shadowsoffire.placebo.patreon.PatreonUtils.WingType;
 import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload;
 import dev.shadowsoffire.placebo.payloads.PatreonDisablePayload.CosmeticType;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.ModelLayerLocation;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.neoforge.client.event.InputEvent;
-import net.neoforged.neoforge.client.network.ClientPacketDistributor;
-import net.neoforged.neoforge.common.NeoForge;
 
+/** Shared Patreon-wing state and keybinding logic. The actual renderer is loader-specific. */
 public class WingsManager {
 
-    static Map<UUID, WingType> WINGS = new HashMap<>();
+    static final Map<UUID, WingType> WINGS = new HashMap<>();
     public static final KeyMapping TOGGLE = new KeyMapping("placebo.toggleWings", GLFW.GLFW_KEY_KP_8, PlaceboClient.KEY_CATEGORY);
     public static final Set<UUID> DISABLED = new HashSet<>();
     public static final ModelLayerLocation WING_LOC = new ModelLayerLocation(Placebo.loc("wings"), "main");
@@ -50,32 +46,29 @@ public class WingsManager {
                         }
                         WINGS.put(UUID.fromString(split[0]), WingType.valueOf(split[1]));
                     }
-                    reader.close();
                 }
                 catch (IOException ex) {
-                    Placebo.LOGGER.error("Exception loading patreon wing data!");
-                    ex.printStackTrace();
+                    Placebo.LOGGER.error("Exception loading patreon wing data!", ex);
                 }
             }
-            catch (Exception k) {
-                // not possible
+            catch (Exception ex) {
+                Placebo.LOGGER.error("Exception loading patreon wing data!", ex);
             }
             Placebo.LOGGER.info("Loaded {} patreon wings.", WINGS.size());
-            if (WINGS.size() > 0) {
-                NeoForge.EVENT_BUS.register(WingsManager.class);
-            }
         }, "Placebo Patreon Wing Loader").start();
     }
 
-    @SubscribeEvent
-    public static void keys(InputEvent.Key e) {
-        if (e.getAction() == InputConstants.PRESS && TOGGLE.matches(e.getKeyEvent()) && Minecraft.getInstance().getConnection() != null) {
-            ClientPacketDistributor.sendToServer(new PatreonDisablePayload(CosmeticType.WINGS, Minecraft.getInstance().player.getUUID()));
+    /** Called by the platform's client-post-tick hook after key mappings have been registered. */
+    public static void handleKeybind() {
+        while (TOGGLE.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.getConnection() != null && mc.player != null) {
+                ClientPayloadSender.toServer(new PatreonDisablePayload(CosmeticType.WINGS, mc.player.getUUID()));
+            }
         }
     }
 
     public static WingType getType(UUID id) {
         return WINGS.get(id);
     }
-
 }

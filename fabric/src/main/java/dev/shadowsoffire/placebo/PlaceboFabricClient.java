@@ -1,12 +1,22 @@
 package dev.shadowsoffire.placebo;
 
 import dev.architectury.event.events.client.ClientTickEvent;
+import dev.architectury.registry.client.keymappings.KeyMappingRegistry;
+import dev.architectury.registry.client.level.entity.EntityModelLayerRegistry;
+import dev.shadowsoffire.placebo.client.FabricWingLayer;
+import dev.shadowsoffire.placebo.network.ClientPayloadSender;
+import dev.shadowsoffire.placebo.network.FabricClientPayloadSender;
+import dev.shadowsoffire.placebo.patreon.TrailsManager;
+import dev.shadowsoffire.placebo.patreon.WingsManager;
+import dev.shadowsoffire.placebo.patreon.wings.Wing;
 import dev.shadowsoffire.placebo.util.FabricTooltipComponents;
 import dev.shadowsoffire.placebo.util.TooltipComponents;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.item.v1.ItemTooltipCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityRenderLayerRegistrationCallback;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
+import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 
 /**
  * Fabric's client entrypoint, the counterpart to {@code NeoForgeClientEvents} -- and the first
@@ -19,11 +29,6 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
  *
  * <h2>Not yet ported</h2>
  * <ul>
- * <li><b>The Patreon cosmetics</b> -- {@code TrailsManager}, {@code WingsManager}, {@code WingLayer}. They are
- * entity-layer rendering, which is a separate design item from client <i>state</i>, and nothing else depends
- * on them.
- * <li><b>Key mappings.</b> Architectury's {@code KeyMappingRegistry} covers this; the two mappings that exist
- * belong to the cosmetics above, so they move together.
  * <li><b>The client reload listener</b>, which fires Placebo's own {@code ResourceReloadEvent} for client
  * resources. {@code ResourceManagerHelper} for {@code PackType.CLIENT_RESOURCES} is the equivalent.
  * </ul>
@@ -39,8 +44,27 @@ public class PlaceboFabricClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         TooltipComponents.setImpl(new FabricTooltipComponents());
+        ClientPayloadSender.setImpl(new FabricClientPayloadSender());
 
-        ClientTickEvent.CLIENT_POST.register(mc -> PlaceboClient.tick());
+        TrailsManager.init();
+        WingsManager.init();
+        KeyMappingRegistry.register(TrailsManager.TOGGLE);
+        KeyMappingRegistry.register(WingsManager.TOGGLE);
+        EntityModelLayerRegistry.register(WingsManager.WING_LOC, Wing::createLayer);
+
+        LivingEntityRenderLayerRegistrationCallback.EVENT.register((entityType, entityRenderer, registrationHelper, context) -> {
+            if (entityRenderer instanceof AvatarRenderer<?> playerRenderer) {
+                Wing.INSTANCE = new Wing(context.bakeLayer(WingsManager.WING_LOC));
+                registrationHelper.register(new FabricWingLayer(playerRenderer));
+            }
+        });
+
+        ClientTickEvent.CLIENT_POST.register(mc -> {
+            PlaceboClient.tick();
+            TrailsManager.tick();
+            TrailsManager.handleKeybind();
+            WingsManager.handleKeybind();
+        });
 
         ItemTooltipCallback.EVENT.register((stack, ctx, type, lines) -> PlaceboClient.setTooltipItem(stack));
 

@@ -26,6 +26,7 @@
     ],
     "client": [
         "client.AbstractContainerScreenMixin",
+        "client.AvatarRendererMixin",
         "client.ChatComponentMixin"
     ],
     "minVersion": "0.8"

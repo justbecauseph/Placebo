@@ -3,6 +3,8 @@ package dev.shadowsoffire.placebo.client;
 import dev.shadowsoffire.placebo.Placebo;
 import dev.shadowsoffire.placebo.PlaceboClient;
 import dev.shadowsoffire.placebo.events.ResourceReloadEvent;
+import dev.shadowsoffire.placebo.network.ClientPayloadSender;
+import dev.shadowsoffire.placebo.network.NeoForgeClientPayloadSender;
 import dev.shadowsoffire.placebo.patreon.TrailsManager;
 import dev.shadowsoffire.placebo.util.NeoForgeTooltipComponents;
 import dev.shadowsoffire.placebo.util.TooltipComponents;
@@ -43,6 +45,7 @@ public class NeoForgeClientEvents {
     @SubscribeEvent
     public static void setup(FMLClientSetupEvent e) {
         TooltipComponents.setImpl(new NeoForgeTooltipComponents());
+        ClientPayloadSender.setImpl(new NeoForgeClientPayloadSender());
         TrailsManager.init();
         WingsManager.init();
         NeoForge.EVENT_BUS.addListener(NeoForgeClientEvents::tick);
@@ -86,6 +89,9 @@ public class NeoForgeClientEvents {
 
     public static void tick(ClientTickEvent.Post e) {
         PlaceboClient.tick();
+        TrailsManager.tick();
+        TrailsManager.handleKeybind();
+        WingsManager.handleKeybind();
     }
 
     public static void scroll(ScreenEvent.MouseScrolled.Pre e) {

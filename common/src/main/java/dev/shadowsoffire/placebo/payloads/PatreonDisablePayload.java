@@ -7,7 +7,9 @@ import java.util.UUID;
 import java.util.function.IntFunction;
 
 import dev.shadowsoffire.placebo.Placebo;
+import dev.shadowsoffire.placebo.network.PayloadContext;
 import dev.shadowsoffire.placebo.network.PayloadProvider;
+import dev.shadowsoffire.placebo.network.PayloadSender;
 import dev.shadowsoffire.placebo.patreon.TrailsManager;
 import dev.shadowsoffire.placebo.patreon.WingsManager;
 import io.netty.buffer.ByteBuf;
@@ -20,9 +22,8 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.util.ByIdMap;
-import net.neoforged.neoforge.network.PacketDistributor;
-import dev.shadowsoffire.placebo.network.PayloadContext;
 
+/** Synchronizes whether a Patreon trail or wing is hidden for a player. */
 public record PatreonDisablePayload(CosmeticType cosmetic, UUID id) implements CustomPacketPayload {
 
     public static final Type<PatreonDisablePayload> TYPE = new Type<>(Placebo.loc("patreon_disable"));
@@ -59,7 +60,7 @@ public record PatreonDisablePayload(CosmeticType cosmetic, UUID id) implements C
 
         @Override
         public void handleServer(PatreonDisablePayload msg, PayloadContext ctx) {
-            PacketDistributor.sendToAllPlayers(new PatreonDisablePayload(msg.cosmetic(), ctx.player().getUUID()));
+            PayloadSender.toAllPlayers(new PatreonDisablePayload(msg.cosmetic(), ctx.player().getUUID()));
         }
 
         @Override
@@ -91,7 +92,5 @@ public record PatreonDisablePayload(CosmeticType cosmetic, UUID id) implements C
         public String getVersion() {
             return "1";
         }
-
     }
-
 }
