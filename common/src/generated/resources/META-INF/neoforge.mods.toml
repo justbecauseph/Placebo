@@ -1,0 +1,31 @@
+modLoader="javafml"
+
+loaderVersion="[2,)"
+
+license="MIT License"
+
+[[mods]] #mandatory
+
+modId="placebo"
+
+version="11.0.0"
+
+displayName="Placebo"
+
+authors="Shadows_of_Fire"
+
+description='''1 (one) library boi'''
+
+[[dependencies.placebo]]
+    modId="minecraft"
+    type="required"
+    versionRange="[26.2,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.placebo]]
+    modId="neoforge"
+    type="required"
+    versionRange="[26.2.0.43-beta,)"
+    ordering="NONE"
+    side="BOTH"

@@ -4,6 +4,8 @@ import java.util.HashMap;
 
 import dev.architectury.event.EventResult;
 import dev.architectury.event.events.common.EntityEvent;
+import dev.architectury.event.events.common.LifecycleEvent;
+import dev.architectury.event.events.common.TickEvent;
 import dev.shadowsoffire.placebo.attachment.DataAttachment;
 import dev.shadowsoffire.placebo.attachment.FabricDataAttachment;
 import dev.shadowsoffire.placebo.commands.PlaceboCommand;
@@ -30,6 +32,7 @@ import dev.shadowsoffire.placebo.util.FabricPersistentData;
 import dev.shadowsoffire.placebo.util.FakePlayerHelper;
 import dev.shadowsoffire.placebo.util.MobSpawnHelper;
 import dev.shadowsoffire.placebo.util.PersistentData;
+import dev.shadowsoffire.placebo.util.PlaceboTaskQueue;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.network.chat.TextColor;
@@ -124,6 +127,11 @@ public class PlaceboFabric implements ModInitializer {
                 return FabricDataAttachment.build(id, defaultValue, config);
             }
         });
+
+        // PlaceboTaskQueue: clear on server start/stop, tick every server tick.
+        LifecycleEvent.SERVER_STARTED.register(server -> PlaceboTaskQueue.onServerStart());
+        LifecycleEvent.SERVER_STOPPED.register(server -> PlaceboTaskQueue.onServerStop());
+        TickEvent.SERVER_POST.register(server -> PlaceboTaskQueue.tick());
 
         Placebo.LOGGER.info("Placebo (Fabric) initialized.");
     }

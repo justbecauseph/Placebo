@@ -8,24 +8,26 @@ import org.apache.commons.lang3.tuple.Pair;
 
 import dev.shadowsoffire.placebo.Placebo;
 import net.minecraft.resources.Identifier;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.server.ServerStartedEvent;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 /**
  * Helper class for scheduling transient tick-based tasks on the server.
  * <p>
  * Do not use for critical functionality, since the queue is abandoned entirely if the game closes or crashes.
+ * <p>
+ * Event wiring (tick, server-started, server-stopped) lives in each loader's entrypoint rather than here,
+ * since the three platform types involved ({@code ServerTickEvent}, {@code ServerStartedEvent},
+ * {@code ServerStoppedEvent}) differ per loader. Call {@link #tick()}, {@link #onServerStart()} and
+ * {@link #onServerStop()} from the appropriate loader hooks.
  */
 public class PlaceboTaskQueue {
+
+    private static final Queue<Pair<Identifier, Task>> TASKS = new ArrayDeque<>();
 
     /**
      * Submits a new task for immediate execution.
      */
     public static void submitTask(Identifier id, Task task) {
-        Impl.TASKS.add(Pair.of(id, task));
+        TASKS.add(Pair.of(id, task));
     }
 
     /**
@@ -34,7 +36,38 @@ public class PlaceboTaskQueue {
      * @param delay The delay, in ticks, before the task begins executing.
      */
     public static void submitDelayedTask(Identifier id, int delay, Task task) {
-        Impl.TASKS.add(Pair.of(id, new DelayedTask(delay, task)));
+        TASKS.add(Pair.of(id, new DelayedTask(delay, task)));
+    }
+
+    /**
+     * Called once per server tick (post). Advances all queued tasks and removes completed ones.
+     */
+    public static void tick() {
+        Iterator<Pair<Identifier, Task>> it = TASKS.iterator();
+        Pair<Identifier, Task> current = null;
+        while (it.hasNext()) {
+            current = it.next();
+            try {
+                if (current.getRight().execute().isCompleted()) {
+                    it.remove();
+                }
+            }
+            catch (Exception ex) {
+                Placebo.LOGGER.error("An exception occurred while running a ticking task with ID {}. It will be terminated.", current.getLeft());
+                it.remove();
+                ex.printStackTrace();
+            }
+        }
+    }
+
+    /** Called when the server starts or finishes reloading. Clears any stale queued tasks. */
+    public static void onServerStart() {
+        TASKS.clear();
+    }
+
+    /** Called when the server stops. Clears any remaining queued tasks. */
+    public static void onServerStop() {
+        TASKS.clear();
     }
 
     @FunctionalInterface
@@ -75,41 +108,6 @@ public class PlaceboTaskQueue {
             return this.task.execute();
         }
 
-    }
-
-    @EventBusSubscriber(modid = Placebo.MODID)
-    public static class Impl {
-
-        private static final Queue<Pair<Identifier, Task>> TASKS = new ArrayDeque<>();
-
-        @SubscribeEvent
-        public static void tick(ServerTickEvent.Post e) {
-            Iterator<Pair<Identifier, Task>> it = TASKS.iterator();
-            Pair<Identifier, Task> current = null;
-            while (it.hasNext()) {
-                current = it.next();
-                try {
-                    if (current.getRight().execute().isCompleted()) {
-                        it.remove();
-                    }
-                }
-                catch (Exception ex) {
-                    Placebo.LOGGER.error("An exception occurred while running a ticking task with ID {}. It will be terminated.", current.getLeft());
-                    it.remove();
-                    ex.printStackTrace();
-                }
-            }
-        }
-
-        @SubscribeEvent
-        public static void stopped(ServerStoppedEvent e) {
-            TASKS.clear();
-        }
-
-        @SubscribeEvent
-        public static void started(ServerStartedEvent e) {
-            TASKS.clear();
-        }
     }
 
 }
