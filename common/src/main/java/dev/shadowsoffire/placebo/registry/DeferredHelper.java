@@ -105,6 +105,9 @@ public class DeferredHelper {
     /** One Architectury {@link DeferredRegister} per target registry, created on demand. */
     protected final Map<ResourceKey<? extends Registry<?>>, DeferredRegister<?>> registers = new java.util.LinkedHashMap<>();
 
+    /** Registers already handed to Architectury; permits dependent registries to be staged in phases. */
+    protected final Set<DeferredRegister<?>> registered = Collections.newSetFromMap(new IdentityHashMap<>());
+
     /** Everything staged through this helper, so {@link #getRegisteredObjects} can report it. */
     protected final Map<ResourceKey<? extends Registry<?>>, List<RegistrySupplier<?>>> suppliers = new java.util.LinkedHashMap<>();
 
@@ -258,7 +261,11 @@ public class DeferredHelper {
      * handles the per-loader timing from there.
      */
     public void registerAll() {
-        this.registers.values().forEach(DeferredRegister::register);
+        this.registers.values().forEach(register -> {
+            if (this.registered.add(register)) {
+                register.register();
+            }
+        });
     }
 
 
