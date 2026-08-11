@@ -4,6 +4,7 @@ import net.minecraft.world.entity.Mob;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.ItemStackedOnOtherEvent;
+import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
@@ -114,6 +115,16 @@ public class NeoForgeEventBridge {
      * The common event's interrupt maps onto cancellation; NeoForge's separate "cancellation result" is left at
      * its default of true, which is what cancelling meant for every handler that moved here.
      */
+    /**
+     * At {@code HIGH} without {@code receiveCanceled}, matching every handler that moved here: none of them
+     * received cancelled events, so a third-party cancel keeps the whole common chain out exactly as before.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void blockDrops(BlockDropsEvent e) {
+        e.setDroppedExperience(PlaceboEvents.fireBlockDrops(e.getLevel(), e.getPos(), e.getState(), e.getBreaker(),
+            e.getTool(), e.getDrops(), e.getDroppedExperience()));
+    }
+
     @SubscribeEvent
     public void itemStackedOnOther(ItemStackedOnOtherEvent e) {
         boolean handled = PlaceboEvents.fireItemStackedOnOther(e.getCarriedItem(), e.getStackedOnItem(), e.getSlot(),

@@ -8,6 +8,7 @@
     "mixins": [
         "AbstractContainerMenuStackedOnMixin",
         "AbstractCubeMobSplitMixin",
+        "BlockDropsMixin",
         "EnchantmentHelperMixin",
         "EntityDropCaptureMixin",
         "EntityInvulnerabilityMixin",

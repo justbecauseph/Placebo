@@ -1,12 +1,14 @@
 package dev.shadowsoffire.placebo.events;
 
 import java.util.Collection;
+import java.util.List;
 
 import org.jetbrains.annotations.Nullable;
 
 import dev.architectury.event.Event;
 import dev.architectury.event.EventFactory;
 import dev.architectury.event.EventResult;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -21,7 +23,9 @@ import net.minecraft.world.item.ItemInstance;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Loader-neutral events for the cases NeoForge has and Fabric does not.
@@ -723,6 +727,117 @@ public class PlaceboEvents {
         ClickAction clickAction, Player player, SlotAccess carriedSlotAccess) {
         ItemStackedOnOtherContext ctx = new ItemStackedOnOtherContext(carriedItem, stackedOnItem, slot, clickAction, player, carriedSlotAccess);
         return ITEM_STACKED_ON_OTHER.invoker().stackedOn(ctx).isTrue();
+    }
+
+    /**
+     * Fired when a block is broken, once its drops and experience have been worked out and before either
+     * reaches the world.
+     * <p>
+     * NeoForge counterpart: {@code BlockDropsEvent}. Vanilla site: {@code Block#dropResources}, all three
+     * overloads.
+     * <p>
+     * <b>Vanilla builds no list here either</b>, the same problem {@link #LIVING_DROPS} has: {@code popResource}
+     * adds each {@link ItemEntity} as it is produced, and the experience is popped from inside each block's own
+     * {@code spawnAfterBreak}. Both platforms divert the two into a collection and a counter first — NeoForge
+     * through its patched static capture on {@code Block}, Fabric through a mixin doing the same.
+     * <p>
+     * <b>The experience is captured, not computed.</b> NeoForge asks {@code BlockState#getExpDrop}, which is one
+     * of its own additions to vanilla; there is no such method to ask on Fabric, because each block decides its
+     * own amount inside {@code spawnAfterBreak}. Intercepting the award is the only way to see the number, and
+     * it has the useful property of being whatever the block actually meant to drop.
+     * <p>
+     * <b>Not cancellable.</b> NeoForge's is — cancelling suppresses the drops, the experience and
+     * {@code spawnAfterBreak} together — and nothing in this stack cancels. The bridge therefore does not
+     * receive cancelled events, so a third-party cancel keeps these listeners out, exactly as it did when they
+     * were on NeoForge's bus directly.
+     */
+    public static final Event<BlockDrops> BLOCK_DROPS = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface BlockDrops {
+        void drops(BlockDropsContext ctx);
+    }
+
+    /**
+     * Mutable state for {@link #BLOCK_DROPS}: the drop list and the experience amount.
+     * <p>
+     * NeoForge's event also carries the {@link net.minecraft.world.level.block.entity.BlockEntity} that was
+     * broken. No listener in this stack reads it, so it is not here.
+     */
+    public static final class BlockDropsContext {
+
+        private final ServerLevel level;
+        private final BlockPos pos;
+        private final BlockState state;
+        private final @Nullable Entity breaker;
+        private final ItemStack tool;
+        private final List<ItemEntity> drops;
+        private int experience;
+
+        public BlockDropsContext(ServerLevel level, BlockPos pos, BlockState state, @Nullable Entity breaker,
+            ItemStack tool, List<ItemEntity> drops, int experience) {
+            this.level = level;
+            this.pos = pos;
+            this.state = state;
+            this.breaker = breaker;
+            this.tool = tool;
+            this.drops = drops;
+            this.experience = experience;
+        }
+
+        public ServerLevel getLevel() {
+            return this.level;
+        }
+
+        public BlockPos getPos() {
+            return this.pos;
+        }
+
+        public BlockState getState() {
+            return this.state;
+        }
+
+        /**
+         * Whoever broke the block, or null when nothing did — the two {@code dropResources} overloads that take
+         * no breaker are used for indirect breaks, such as a block losing its support.
+         */
+        public @Nullable Entity getBreaker() {
+            return this.breaker;
+        }
+
+        /**
+         * The tool used, or empty for the breaker-less overloads.
+         */
+        public ItemStack getTool() {
+            return this.tool;
+        }
+
+        /**
+         * The drops, which listeners may modify in place.
+         */
+        public List<ItemEntity> getDrops() {
+            return this.drops;
+        }
+
+        public int getDroppedExperience() {
+            return this.experience;
+        }
+
+        public void setDroppedExperience(int experience) {
+            this.experience = experience;
+        }
+    }
+
+    /**
+     * Fires {@link #BLOCK_DROPS}. Called by the platform bridge, not by mods.
+     *
+     * @return the experience to drop, after listeners have run.
+     */
+    public static int fireBlockDrops(ServerLevel level, BlockPos pos, BlockState state, @Nullable Entity breaker,
+        ItemStack tool, List<ItemEntity> drops, int experience) {
+        BlockDropsContext ctx = new BlockDropsContext(level, pos, state, breaker, tool, drops, experience);
+        BLOCK_DROPS.invoker().drops(ctx);
+        return ctx.getDroppedExperience();
     }
 
 }
