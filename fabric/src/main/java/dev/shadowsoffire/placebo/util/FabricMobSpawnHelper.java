@@ -6,6 +6,7 @@ import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.SpawnGroupData;
+import net.minecraft.world.level.BaseSpawner;
 import net.minecraft.world.level.ServerLevelAccessor;
 
 /**
@@ -22,6 +23,17 @@ public class FabricMobSpawnHelper implements MobSpawnHelper.Impl {
     public SpawnGroupData finalizeSpawn(Mob mob, ServerLevelAccessor level, DifficultyInstance difficulty,
         EntitySpawnReason reason, @Nullable SpawnGroupData data) {
         return mob.finalizeSpawn(level, difficulty, reason, data);
+    }
+
+    /**
+     * Always defers. Fabric has no equivalent of NeoForge's {@code PositionCheck}, so there is nothing that
+     * could have decided -- returning null sends the caller to its own checks, which is what NeoForge's
+     * {@code DEFAULT} does.
+     */
+    @Override
+    @Nullable
+    public Boolean checkSpawnPosition(Mob mob, ServerLevelAccessor level, EntitySpawnReason reason, BaseSpawner spawner) {
+        return null;
     }
 
     @Override

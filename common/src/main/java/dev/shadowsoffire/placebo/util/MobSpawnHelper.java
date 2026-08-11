@@ -8,6 +8,7 @@ import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.SpawnGroupData;
+import net.minecraft.world.level.BaseSpawner;
 import net.minecraft.world.level.ServerLevelAccessor;
 
 /**
@@ -49,6 +50,20 @@ public class MobSpawnHelper {
     }
 
     /**
+     * Asks the platform whether a spawner's placement check has been overridden.
+     * <p>
+     * NeoForge posts {@code MobSpawnEvent.PositionCheck}, which lets other mods force or deny a spawn.
+     * Fabric has no equivalent and no listeners to lose, so it always defers. Callers run their own checks
+     * when this returns null, which is exactly what NeoForge's {@code Result.DEFAULT} means.
+     *
+     * @return TRUE to force the spawn, FALSE to deny it, or null if nothing decided.
+     */
+    @Nullable
+    public static Boolean checkSpawnPosition(Mob mob, ServerLevelAccessor level, EntitySpawnReason reason, BaseSpawner spawner) {
+        return impl().checkSpawnPosition(mob, level, reason, spawner);
+    }
+
+    /**
      * Whether {@code mob} has been marked as not allowed to reach the world.
      */
     public static boolean isSpawnCancelled(Mob mob) {
@@ -76,6 +91,9 @@ public class MobSpawnHelper {
         @Nullable
         SpawnGroupData finalizeSpawn(Mob mob, ServerLevelAccessor level, DifficultyInstance difficulty,
             EntitySpawnReason reason, @Nullable SpawnGroupData data);
+
+        @Nullable
+        Boolean checkSpawnPosition(Mob mob, ServerLevelAccessor level, EntitySpawnReason reason, BaseSpawner spawner);
 
         boolean isSpawnCancelled(Mob mob);
 

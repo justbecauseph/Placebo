@@ -7,7 +7,10 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.SpawnGroupData;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.BaseSpawner;
+import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.EventHooks;
+import net.neoforged.neoforge.event.entity.living.MobSpawnEvent.PositionCheck;
 
 /**
  * {@link MobSpawnHelper.Impl} for NeoForge. Goes through {@code EventHooks} rather than calling vanilla, so
@@ -20,6 +23,22 @@ public class NeoForgeMobSpawnHelper implements MobSpawnHelper.Impl {
     public SpawnGroupData finalizeSpawn(Mob mob, ServerLevelAccessor level, DifficultyInstance difficulty,
         EntitySpawnReason reason, @Nullable SpawnGroupData data) {
         return EventHooks.finalizeMobSpawn(mob, level, difficulty, reason, data);
+    }
+
+    /**
+     * Posts {@code PositionCheck} so other mods can force or deny the spawn, mapping its tri-state onto the
+     * nullable Boolean the common seam uses.
+     */
+    @Override
+    @Nullable
+    public Boolean checkSpawnPosition(Mob mob, ServerLevelAccessor level, EntitySpawnReason reason, BaseSpawner spawner) {
+        PositionCheck event = new PositionCheck(mob, level, reason, spawner);
+        NeoForge.EVENT_BUS.post(event);
+        return switch (event.getResult()) {
+            case DEFAULT -> null;
+            case SUCCEED -> Boolean.TRUE;
+            case FAIL -> Boolean.FALSE;
+        };
     }
 
     @Override
