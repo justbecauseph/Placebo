@@ -2,35 +2,38 @@ package dev.shadowsoffire.placebo;
 
 import java.util.HashMap;
 
+import dev.architectury.event.EventResult;
+import dev.architectury.event.events.common.EntityEvent;
+import dev.shadowsoffire.placebo.attachment.DataAttachment;
+import dev.shadowsoffire.placebo.attachment.FabricDataAttachment;
 import dev.shadowsoffire.placebo.commands.PlaceboCommand;
+import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.FabricDynReg;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
 import dev.shadowsoffire.placebo.network.FabricPayloadRegistrar;
 import dev.shadowsoffire.placebo.network.FabricPayloadSender;
-import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
 import dev.shadowsoffire.placebo.network.PayloadHelper;
 import dev.shadowsoffire.placebo.network.PayloadSender;
-import dev.shadowsoffire.placebo.attachment.DataAttachment;
-import dev.shadowsoffire.placebo.attachment.FabricDataAttachment;
+import dev.shadowsoffire.placebo.payloads.ButtonClickPayload;
 import dev.shadowsoffire.placebo.registry.DeferredHelper;
-import dev.shadowsoffire.placebo.crafting.IngredientType;
-import dev.shadowsoffire.placebo.registry.FabricIngredients;
 import dev.shadowsoffire.placebo.registry.FabricDataMaps;
-import dev.shadowsoffire.placebo.registry.FabricRegistryFactory;
-import net.minecraft.resources.Identifier;
 import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
+import dev.shadowsoffire.placebo.registry.FabricIngredients;
+import dev.shadowsoffire.placebo.registry.FabricRegistryFactory;
 import dev.shadowsoffire.placebo.systems.gear.GearSetRegistry;
 import dev.shadowsoffire.placebo.tabs.FabricTabFillContext;
 import dev.shadowsoffire.placebo.util.FabricFakePlayerHelper;
 import dev.shadowsoffire.placebo.util.FabricMobSpawnHelper;
 import dev.shadowsoffire.placebo.util.FabricPersistentData;
-import dev.shadowsoffire.placebo.util.PersistentData;
 import dev.shadowsoffire.placebo.util.FakePlayerHelper;
 import dev.shadowsoffire.placebo.util.MobSpawnHelper;
+import dev.shadowsoffire.placebo.util.PersistentData;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.entity.Mob;
 
 /**
  * Fabric entrypoint, the counterpart to {@code PlaceboNeoForge}.
@@ -98,6 +101,15 @@ public class PlaceboFabric implements ModInitializer {
         PayloadSender.setImpl(new FabricPayloadSender());
         FakePlayerHelper.setImpl(new FabricFakePlayerHelper());
         MobSpawnHelper.setImpl(new FabricMobSpawnHelper());
+        // The half of the spawn-cancelled flag that acts on it. NeoForge does the same thing from its own
+        // EntityJoinLevelEvent handler; Architectury's EntityEvent.ADD is the loader-neutral spelling, and
+        // returning interruptFalse is what stops the entity being added.
+        EntityEvent.ADD.register((entity, level) -> {
+            if (entity instanceof Mob mob && MobSpawnHelper.isSpawnCancelled(mob)) {
+                return EventResult.interruptFalse();
+            }
+            return EventResult.pass();
+        });
         PersistentData.setImpl(new FabricPersistentData());
         // Attachments. Anonymous rather than a method reference: the factory method is generic.
         DeferredHelper.setAttachmentFactory(new DeferredHelper.AttachmentFactory() {
@@ -108,7 +120,6 @@ public class PlaceboFabric implements ModInitializer {
                 return FabricDataAttachment.build(id, defaultValue, config);
             }
         });
-
 
         Placebo.LOGGER.info("Placebo (Fabric) initialized.");
     }

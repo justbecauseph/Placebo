@@ -19,6 +19,8 @@
         "LivingEntityShieldBlockMixin",
         "LivingEntityUseItemMixin",
         "MobDespawnMixin",
+        "MobFinalizeSpawnMixin",
+        "MobSpawnCancelMixin",
         "WitherBossDespawnMixin"
     ],
     "client": [

@@ -22,4 +22,19 @@ public class NeoForgeMobSpawnHelper implements MobSpawnHelper.Impl {
         return EventHooks.finalizeMobSpawn(mob, level, difficulty, reason, data);
     }
 
+    @Override
+    public boolean isSpawnCancelled(Mob mob) {
+        return mob.isSpawnCancelled();
+    }
+
+    /**
+     * NeoForge throws if the mob is already in the world, since the flag is only read on the way in. Left to
+     * throw rather than swallowed: a listener setting this too late has a bug either way, and on Fabric the
+     * same call would silently do nothing.
+     */
+    @Override
+    public void setSpawnCancelled(Mob mob, boolean cancelled) {
+        mob.setSpawnCancelled(cancelled);
+    }
+
 }

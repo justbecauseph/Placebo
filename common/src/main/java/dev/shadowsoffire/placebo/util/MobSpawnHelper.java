@@ -17,11 +17,14 @@ import net.minecraft.world.level.ServerLevelAccessor;
  * {@code FinalizeSpawnEvent}, which other mods listen to -- so NeoForge has to keep going through
  * {@code EventHooks.finalizeMobSpawn}, whose signature is vanilla's with the mob moved to the front.
  * <p>
- * <b>Fabric fires no event here, deliberately.</b> The obvious next step would be to add a
- * {@code FINALIZE_SPAWN} to {@code PlaceboEvents} and fire it from the Fabric side, but that would produce an
- * event that fires for this stack's three call sites and not for any of vanilla's own spawns -- worse than no
- * event, because it would look complete. Covering {@code FinalizeSpawnEvent} properly means a mixin on the
- * vanilla method, and that belongs with the rest of the gap-event work.
+ * <b>{@code PlaceboEvents.FINALIZE_SPAWN} now covers the event half</b>, from a mixin on the vanilla method on
+ * <i>both</i> loaders -- NeoForge's own event turned out never to fire for natural spawns. This class is still
+ * the right way to finalize a spawn you initiate yourself, because on NeoForge it also posts
+ * {@code FinalizeSpawnEvent} for other mods listening to it.
+ * <p>
+ * It also owns the <b>spawn-cancelled flag</b>, which is a platform difference rather than an event: NeoForge
+ * patches a field onto {@code Mob} that its own spawn paths honour, and Placebo supplies the equivalent on
+ * Fabric.
  */
 public class MobSpawnHelper {
 
@@ -42,11 +45,30 @@ public class MobSpawnHelper {
     @Nullable
     public static SpawnGroupData finalizeSpawn(Mob mob, ServerLevelAccessor level, DifficultyInstance difficulty,
         EntitySpawnReason reason, @Nullable SpawnGroupData data) {
+        return impl().finalizeSpawn(mob, level, difficulty, reason, data);
+    }
+
+    /**
+     * Whether {@code mob} has been marked as not allowed to reach the world.
+     */
+    public static boolean isSpawnCancelled(Mob mob) {
+        return impl().isSpawnCancelled(mob);
+    }
+
+    /**
+     * Marks {@code mob} as allowed or not allowed to reach the world. Used by listeners on
+     * {@code PlaceboEvents.FINALIZE_SPAWN} that replace a mob with something else.
+     */
+    public static void setSpawnCancelled(Mob mob, boolean cancelled) {
+        impl().setSpawnCancelled(mob, cancelled);
+    }
+
+    private static Impl impl() {
         if (impl == null) {
             throw new IllegalStateException("No MobSpawnHelper implementation has been installed. "
                 + "The platform entrypoint must call MobSpawnHelper.setImpl before a mob spawn is finalized.");
         }
-        return impl.finalizeSpawn(mob, level, difficulty, reason, data);
+        return impl;
     }
 
     public interface Impl {
@@ -54,6 +76,10 @@ public class MobSpawnHelper {
         @Nullable
         SpawnGroupData finalizeSpawn(Mob mob, ServerLevelAccessor level, DifficultyInstance difficulty,
             EntitySpawnReason reason, @Nullable SpawnGroupData data);
+
+        boolean isSpawnCancelled(Mob mob);
+
+        void setSpawnCancelled(Mob mob, boolean cancelled);
     }
 
 }

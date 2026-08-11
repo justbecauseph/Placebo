@@ -8,10 +8,12 @@ import org.jetbrains.annotations.Nullable;
 import dev.architectury.event.Event;
 import dev.architectury.event.EventFactory;
 import dev.architectury.event.EventResult;
+import dev.shadowsoffire.placebo.util.MobSpawnHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -838,6 +840,120 @@ public class PlaceboEvents {
         BlockDropsContext ctx = new BlockDropsContext(level, pos, state, breaker, tool, drops, experience);
         BLOCK_DROPS.invoker().drops(ctx);
         return ctx.getDroppedExperience();
+    }
+
+    /**
+     * Fired when a {@link Mob} is about to be given its spawn-time setup — equipment, difficulty scaling, group
+     * data — so that listeners can adjust it or replace the mob entirely.
+     * <p>
+     * NeoForge counterpart: {@code FinalizeSpawnEvent}. Vanilla site: {@code Mob#finalizeSpawn}, at HEAD.
+     * <p>
+     * <b>This one fires on NeoForge from a mixin too, not from a bridge, and that is the whole point.</b>
+     * NeoForge posts its own event from {@code BaseSpawner} and {@code TrialSpawner} and nowhere else —
+     * {@code NaturalSpawner} calls {@code Mob#finalizeSpawn} directly, so on NeoForge the event never sees a
+     * natural or chunk-generation spawn. Bridging would have reproduced that gap on Fabric, and hooking the
+     * vanilla method on Fabric alone would have given Fabric a working feature NeoForge lacks. Hooking it on
+     * both is the only option that leaves the two loaders agreeing.
+     * <p>
+     * The consequence is deliberate and worth knowing: on NeoForge this fires for spawns that
+     * {@code FinalizeSpawnEvent} does not see. NeoForge's own event is untouched and still fires for anyone
+     * listening to it.
+     * <p>
+     * <b>Two independent cancellations</b>, because NeoForge has two and both are used here:
+     * {@link FinalizeSpawnContext#setCanceled} skips the spawn setup, and
+     * {@link FinalizeSpawnContext#setSpawnCancelled} stops the mob reaching the world at all.
+     */
+    public static final Event<FinalizeSpawn> FINALIZE_SPAWN = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface FinalizeSpawn {
+        void finalizeSpawn(FinalizeSpawnContext ctx);
+    }
+
+    /**
+     * Mutable state for {@link #FINALIZE_SPAWN}.
+     * <p>
+     * NeoForge's event also carries the difficulty, the spawn group data and the spawner that produced the mob.
+     * Nothing in this stack reads any of them, so they are not here.
+     */
+    public static final class FinalizeSpawnContext {
+
+        private final Mob entity;
+        private final ServerLevelAccessor level;
+        private final EntitySpawnReason spawnType;
+        private boolean canceled;
+
+        public FinalizeSpawnContext(Mob entity, ServerLevelAccessor level, EntitySpawnReason spawnType) {
+            this.entity = entity;
+            this.level = level;
+            this.spawnType = spawnType;
+        }
+
+        public Mob getEntity() {
+            return this.entity;
+        }
+
+        public ServerLevelAccessor getLevel() {
+            return this.level;
+        }
+
+        public double getX() {
+            return this.entity.getX();
+        }
+
+        public double getY() {
+            return this.entity.getY();
+        }
+
+        public double getZ() {
+            return this.entity.getZ();
+        }
+
+        /**
+         * Why the mob is being spawned. Invader and elite replacement keys off this — natural and
+         * chunk-generation spawns only.
+         */
+        public EntitySpawnReason getSpawnType() {
+            return this.spawnType;
+        }
+
+        /**
+         * Whether the spawn setup itself is cancelled. The mob still spawns; it simply does not get its
+         * equipment, difficulty scaling or group data.
+         */
+        public boolean isCanceled() {
+            return this.canceled;
+        }
+
+        public void setCanceled(boolean canceled) {
+            this.canceled = canceled;
+        }
+
+        /**
+         * Whether the mob is blocked from reaching the world. This is separate from {@link #isCanceled()}: a
+         * listener replacing the mob with something else wants both.
+         * <p>
+         * Backed by the platform — NeoForge has a patched field on {@code Mob} that its own
+         * {@code addFreshEntity} path honours, and Placebo supplies the equivalent on Fabric.
+         */
+        public boolean isSpawnCancelled() {
+            return MobSpawnHelper.isSpawnCancelled(this.entity);
+        }
+
+        public void setSpawnCancelled(boolean cancelled) {
+            MobSpawnHelper.setSpawnCancelled(this.entity, cancelled);
+        }
+    }
+
+    /**
+     * Fires {@link #FINALIZE_SPAWN}. Called by the platform mixin, not by mods.
+     *
+     * @return true if the spawn setup was cancelled and vanilla's should be skipped.
+     */
+    public static boolean fireFinalizeSpawn(Mob mob, ServerLevelAccessor level, EntitySpawnReason spawnType) {
+        FinalizeSpawnContext ctx = new FinalizeSpawnContext(mob, level, spawnType);
+        FINALIZE_SPAWN.invoker().finalizeSpawn(ctx);
+        return ctx.isCanceled();
     }
 
 }

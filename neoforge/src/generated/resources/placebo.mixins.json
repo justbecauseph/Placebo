@@ -8,7 +8,8 @@
         "DataProviderMixin",
         "DatagenModLoaderMixin",
         "HashCacheMixin",
-        "ItemStackMixin"
+        "ItemStackMixin",
+        "MobFinalizeSpawnMixin"
     ],
     "client": [
         "client.AbstractContainerScreenMixin",
