@@ -41,17 +41,33 @@ public final class FabricDynReg {
     private FabricDynReg() {}
 
     public static void install() {
+        bindRuntimeHooks();
+
+        // The tag manager is itself a reload listener, and must be registered like any other.
+        ReloadListenerRegistry.register(PackType.SERVER_DATA, DynamicTagManager.INSTANCE, DynamicTagManager.ID);
+    }
+
+    /**
+     * Rebinds the per-class-state hooks used by an Architectury downstream development transform.
+     * <p>
+     * Loom may load a dependent common development jar against a fresh copy of Placebo's common static
+     * state after Placebo's own entrypoint has run. Registering the singleton tag listener again is illegal,
+     * but the copied {@link DynRegPlatform} and {@link SyncManagement} still need their Fabric delegates.
+     * Production jars normally share one state; this method is intentionally safe there as well because
+     * Fabric lifecycle events allow multiple listeners.
+     */
+    public static void rebindRuntimeHooks() {
+        bindRuntimeHooks();
+    }
+
+    private static void bindRuntimeHooks() {
         DynRegPlatform.install(FabricDynReg::contextFor, FabricDynReg::registerReloadListener, new Sender());
 
         // The registry lookup has to come from the running server: unlike NeoForge, Fabric injects nothing
         // into the listener, so there is no context to read off it.
         ServerLifecycleEvents.SERVER_STARTING.register(s -> server = s);
         ServerLifecycleEvents.SERVER_STOPPED.register(s -> server = null);
-
         ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> SyncManagement.syncAll(player));
-
-        // The tag manager is itself a reload listener, and must be registered like any other.
-        ReloadListenerRegistry.register(PackType.SERVER_DATA, DynamicTagManager.INSTANCE, DynamicTagManager.ID);
     }
 
     private static ReloadContext contextFor(@Nullable DynamicRegistry<?> registry) {
