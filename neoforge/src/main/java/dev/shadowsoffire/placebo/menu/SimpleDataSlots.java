@@ -80,8 +80,8 @@ public class SimpleDataSlots {
      * Implement this interface on a {@link BlockEntity} to allow it to automatically register data slots
      * to any {@link BlockEntityMenu}s that are opened with it.
      */
-    public interface IDataAutoRegister {
-        public void registerSlots(Consumer<DataSlot> consumer);
-    }
+    /** @deprecated Implement the loader-neutral {@link dev.shadowsoffire.placebo.menu.IDataAutoRegister}. */
+    @Deprecated
+    public interface IDataAutoRegister extends dev.shadowsoffire.placebo.menu.IDataAutoRegister {}
 
 }
