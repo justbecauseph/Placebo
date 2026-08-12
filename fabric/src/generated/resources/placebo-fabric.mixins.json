@@ -22,6 +22,7 @@
         "LivingEntityEquipmentMixin",
         "LivingEntityExperienceMixin",
         "LivingEntityHealMixin",
+        "LivingEntityIncomingDamageMixin",
         "LivingEntityShieldBlockMixin",
         "LivingEntityUseItemMixin",
         "LlamaSpitProjectileImpactMixin",

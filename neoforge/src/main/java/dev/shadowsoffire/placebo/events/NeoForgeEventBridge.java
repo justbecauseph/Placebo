@@ -13,6 +13,7 @@ import net.neoforged.neoforge.event.entity.living.LivingEquipmentChangeEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent;
 import net.neoforged.neoforge.event.entity.living.MobDespawnEvent;
 import net.neoforged.neoforge.event.entity.living.MobSplitEvent;
@@ -157,6 +158,21 @@ public class NeoForgeEventBridge {
     @SubscribeEvent
     public void entityTickPost(EntityTickEvent.Post e) {
         PlaceboEvents.fireEntityTickPost(e.getEntity());
+    }
+
+    /**
+     * Bridges at the earliest priority any stack consumer used. Their original relative order now lives on
+     * {@link PlaceboEvents#LIVING_INCOMING_DAMAGE}, while external ordering necessarily collapses to this slot.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void incomingDamage(LivingIncomingDamageEvent e) {
+        PlaceboEvents.IncomingDamageContext ctx = new PlaceboEvents.IncomingDamageContext(e.getEntity(), e.getSource(), e.getAmount());
+        if (PlaceboEvents.fireIncomingDamage(ctx)) {
+            e.setCanceled(true);
+        }
+        else {
+            e.setAmount(ctx.getDamage());
+        }
     }
 
 }

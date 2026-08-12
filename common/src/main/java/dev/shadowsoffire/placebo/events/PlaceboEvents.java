@@ -1038,4 +1038,61 @@ public class PlaceboEvents {
         ENTITY_TICK_POST.invoker().tick(entity);
     }
 
+    /**
+     * Fired after vanilla's early rejection checks, before blocking, armor/magic reductions, absorption, and
+     * health mutation. This mirrors NeoForge's mutable {@code LivingIncomingDamageEvent}; Fabric's analogous
+     * callback is boolean-only and cannot carry a modified damage amount.
+     */
+    public static final Event<IncomingDamage> LIVING_INCOMING_DAMAGE = EventFactory.createEventResult();
+
+    @FunctionalInterface
+    public interface IncomingDamage {
+        EventResult damage(IncomingDamageContext ctx);
+    }
+
+    /** Mutable damage context shared by the incoming-damage bridge. */
+    public static final class IncomingDamageContext {
+
+        private final LivingEntity entity;
+        private final DamageSource source;
+        private final float originalDamage;
+        private float damage;
+
+        public IncomingDamageContext(LivingEntity entity, DamageSource source, float damage) {
+            this.entity = entity;
+            this.source = source;
+            this.originalDamage = damage;
+            this.damage = damage;
+        }
+
+        public LivingEntity getEntity() {
+            return this.entity;
+        }
+
+        public DamageSource getSource() {
+            return this.source;
+        }
+
+        public float getOriginalDamage() {
+            return this.originalDamage;
+        }
+
+        public float getDamage() {
+            return this.damage;
+        }
+
+        public void setDamage(float damage) {
+            this.damage = damage;
+        }
+    }
+
+    /**
+     * Fires {@link #LIVING_INCOMING_DAMAGE}.
+     *
+     * @return true if vanilla should cancel the damage sequence.
+     */
+    public static boolean fireIncomingDamage(IncomingDamageContext ctx) {
+        return LIVING_INCOMING_DAMAGE.invoker().damage(ctx).isFalse();
+    }
+
 }
