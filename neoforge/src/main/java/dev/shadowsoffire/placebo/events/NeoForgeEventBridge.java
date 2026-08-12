@@ -14,6 +14,7 @@ import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent;
 import net.neoforged.neoforge.event.entity.living.MobDespawnEvent;
 import net.neoforged.neoforge.event.entity.living.MobSplitEvent;
@@ -173,6 +174,20 @@ public class NeoForgeEventBridge {
         else {
             e.setAmount(ctx.getDamage());
         }
+    }
+
+    /** See {@link PlaceboEvents#LIVING_DAMAGE_PRE}. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void livingDamagePre(LivingDamageEvent.Pre e) {
+        PlaceboEvents.LivingDamagePreContext ctx = new PlaceboEvents.LivingDamagePreContext(e.getEntity(), e.getSource(), e.getOriginalDamage(), e.getNewDamage());
+        PlaceboEvents.fireLivingDamagePre(ctx);
+        e.setNewDamage(ctx.getDamage());
+    }
+
+    /** See {@link PlaceboEvents#LIVING_DAMAGE_POST}. */
+    @SubscribeEvent
+    public void livingDamagePost(LivingDamageEvent.Post e) {
+        PlaceboEvents.fireLivingDamagePost(new PlaceboEvents.LivingDamagePostContext(e.getEntity(), e.getSource(), e.getOriginalDamage(), e.getInflictedDamage(), e.getHealthDamage()));
     }
 
 }

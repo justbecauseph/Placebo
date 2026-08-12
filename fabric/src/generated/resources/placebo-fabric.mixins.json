@@ -18,6 +18,7 @@
         "FireworkRocketProjectileImpactMixin",
         "FishingHookProjectileImpactMixin",
         "ItemStackMixin",
+        "LivingEntityDamageMixin",
         "LivingEntityDropsMixin",
         "LivingEntityEquipmentMixin",
         "LivingEntityExperienceMixin",

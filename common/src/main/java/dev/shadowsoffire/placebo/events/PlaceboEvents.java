@@ -1095,4 +1095,112 @@ public class PlaceboEvents {
         return LIVING_INCOMING_DAMAGE.invoker().damage(ctx).isFalse();
     }
 
+    /**
+     * Fired after vanilla has applied armor and magic reductions but before it consumes absorption or changes
+     * health. This mirrors NeoForge's mutable {@code LivingDamageEvent.Pre}.
+     */
+    public static final Event<LivingDamagePre> LIVING_DAMAGE_PRE = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface LivingDamagePre {
+        void damage(LivingDamagePreContext ctx);
+    }
+
+    /** Mutable context for the post-mitigation, pre-absorption damage phase. */
+    public static final class LivingDamagePreContext {
+
+        private final LivingEntity entity;
+        private final DamageSource source;
+        private final float originalDamage;
+        private float damage;
+
+        public LivingDamagePreContext(LivingEntity entity, DamageSource source, float originalDamage, float damage) {
+            this.entity = entity;
+            this.source = source;
+            this.originalDamage = originalDamage;
+            this.damage = damage;
+        }
+
+        public LivingEntity getEntity() {
+            return this.entity;
+        }
+
+        public DamageSource getSource() {
+            return this.source;
+        }
+
+        public float getOriginalDamage() {
+            return this.originalDamage;
+        }
+
+        public float getDamage() {
+            return this.damage;
+        }
+
+        public void setDamage(float damage) {
+            this.damage = damage;
+        }
+    }
+
+    /** Fires {@link #LIVING_DAMAGE_PRE}. */
+    public static void fireLivingDamagePre(LivingDamagePreContext ctx) {
+        LIVING_DAMAGE_PRE.invoker().damage(ctx);
+    }
+
+    /**
+     * Fired after vanilla has consumed absorption and applied the remaining damage to health. This mirrors the
+     * values consumed by NeoForge's {@code LivingDamageEvent.Post}.
+     */
+    public static final Event<LivingDamagePost> LIVING_DAMAGE_POST = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface LivingDamagePost {
+        void damage(LivingDamagePostContext ctx);
+    }
+
+    /** Final values from one post-mitigation damage sequence. */
+    public static final class LivingDamagePostContext {
+
+        private final LivingEntity entity;
+        private final DamageSource source;
+        private final float originalDamage;
+        private final float inflictedDamage;
+        private final float healthDamage;
+
+        public LivingDamagePostContext(LivingEntity entity, DamageSource source, float originalDamage, float inflictedDamage, float healthDamage) {
+            this.entity = entity;
+            this.source = source;
+            this.originalDamage = originalDamage;
+            this.inflictedDamage = inflictedDamage;
+            this.healthDamage = healthDamage;
+        }
+
+        public LivingEntity getEntity() {
+            return this.entity;
+        }
+
+        public DamageSource getSource() {
+            return this.source;
+        }
+
+        public float getOriginalDamage() {
+            return this.originalDamage;
+        }
+
+        /** Damage after Pre listeners and before absorption. */
+        public float getInflictedDamage() {
+            return this.inflictedDamage;
+        }
+
+        /** Damage that was ultimately applied to health after absorption. */
+        public float getHealthDamage() {
+            return this.healthDamage;
+        }
+    }
+
+    /** Fires {@link #LIVING_DAMAGE_POST}. */
+    public static void fireLivingDamagePost(LivingDamagePostContext ctx) {
+        LIVING_DAMAGE_POST.invoker().damage(ctx);
+    }
+
 }
