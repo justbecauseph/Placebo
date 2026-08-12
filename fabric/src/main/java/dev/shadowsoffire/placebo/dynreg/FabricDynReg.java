@@ -10,10 +10,12 @@ import dev.architectury.registry.ReloadListenerRegistry;
 import dev.shadowsoffire.placebo.registry.FabricDataMaps;
 import dev.shadowsoffire.placebo.dynreg.tag.DynamicTagManager;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
@@ -37,6 +39,7 @@ public final class FabricDynReg {
     private static MinecraftServer server;
     private static final RegistryAccess.Frozen BUILTIN_LOOKUP =
         RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY);
+    private static volatile HolderLookup.Provider reloadLookup = BUILTIN_LOOKUP;
 
     private FabricDynReg() {}
 
@@ -74,7 +77,12 @@ public final class FabricDynReg {
         // Fabric performs a server-data validation reload while opening the world-selection/create-world
         // screens, before an integrated server exists. Built-in registries are sufficient for that pass;
         // the authoritative server reload runs again with the full registry access after SERVER_STARTING.
-        return new FabricReloadContext(server == null ? BUILTIN_LOOKUP : server.registryAccess());
+        return new FabricReloadContext(server == null ? reloadLookup : server.registryAccess());
+    }
+
+    /** Called by the reload-resources mixin immediately before custom listeners run. */
+    public static void setReloadLookup(HolderLookup.Provider lookup) {
+        reloadLookup = lookup;
     }
 
     /**
@@ -86,9 +94,12 @@ public final class FabricDynReg {
      * Nothing here reads one today; the edge is declared because the failure it prevents is silent and the
      * dependency costs nothing.
      */
-    private static void registerReloadListener(Identifier id, DynamicRegistry<?> registry) {
-        ReloadListenerRegistry.register(PackType.SERVER_DATA, registry, id,
-            List.of(DynamicTagManager.ID, FabricDataMaps.ID));
+    private static void registerReloadListener(Identifier id, DynamicRegistry<?> registry, List<Identifier> dependencies) {
+        ReloadListenerRegistry.register(PackType.SERVER_DATA, registry, id, dependencies);
+
+        ResourceLoader loader = ResourceLoader.get(PackType.SERVER_DATA);
+        loader.addListenerOrdering(FabricDataMaps.ID, id);
+        loader.addListenerOrdering(id, DynamicTagManager.ID);
     }
 
     private static class Sender implements DynRegPlatform.SyncHandler {

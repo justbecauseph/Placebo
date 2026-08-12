@@ -1,5 +1,6 @@
 package dev.shadowsoffire.placebo.dynreg;
 
+import java.util.List;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
@@ -46,8 +47,8 @@ public final class DynRegPlatform {
      * Registers a registry as a server reload listener. The platform is responsible for ordering it before
      * its own tag manager -- tag loading must run after registry content has been deserialized.
      */
-    public static void registerReloadListener(Identifier id, DynamicRegistry<?> registry) {
-        require(reloadRegistrar, "reload registrar").register(id, registry);
+    public static void registerReloadListener(Identifier id, DynamicRegistry<?> registry, List<Identifier> dependencies) {
+        require(reloadRegistrar, "reload registrar").register(id, registry, dependencies);
     }
 
     /**
@@ -68,7 +69,7 @@ public final class DynRegPlatform {
 
     @FunctionalInterface
     public interface ReloadRegistrar {
-        void register(Identifier id, DynamicRegistry<?> registry);
+        void register(Identifier id, DynamicRegistry<?> registry, List<Identifier> dependencies);
     }
 
     /**

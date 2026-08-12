@@ -24,7 +24,7 @@ public final class NeoForgeDynReg {
      * Registries queued for reload registration. {@link AddServerReloadListenersEvent} is the only place the
      * listener can be added, so registrations made before it fires are buffered here.
      */
-    private static final Map<Identifier, DynamicRegistry<?>> PENDING = new java.util.LinkedHashMap<>();
+    private static final Map<Identifier, PendingRegistry> PENDING = new java.util.LinkedHashMap<>();
 
     private NeoForgeDynReg() {}
 
@@ -42,8 +42,8 @@ public final class NeoForgeDynReg {
         return new NeoForgeReloadContext(accessor.placebo$getRegistryLookup(), accessor.placebo$getContext());
     }
 
-    private static void queue(Identifier id, DynamicRegistry<?> registry) {
-        PENDING.put(id, registry);
+    private static void queue(Identifier id, DynamicRegistry<?> registry, List<Identifier> dependencies) {
+        PENDING.put(id, new PendingRegistry(registry, List.copyOf(dependencies)));
     }
 
     /**
@@ -51,11 +51,14 @@ public final class NeoForgeDynReg {
      * loading runs after registry content has been deserialized.
      */
     public static void addReloadListeners(AddServerReloadListenersEvent e) {
-        PENDING.forEach((id, registry) -> {
-            e.addListener(id, registry);
+        PENDING.forEach((id, pending) -> {
+            e.addListener(id, pending.registry());
+            pending.dependencies().forEach(dependency -> e.addDependency(dependency, id));
             e.addDependency(id, DynamicTagManager.ID);
         });
     }
+
+    private record PendingRegistry(DynamicRegistry<?> registry, List<Identifier> dependencies) {}
 
     /**
      * Bridges NeoForge's datapack-sync event onto the loader-neutral {@link SyncManagement#syncAll}.

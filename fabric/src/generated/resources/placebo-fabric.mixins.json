@@ -22,6 +22,7 @@
         "MobDespawnMixin",
         "MobFinalizeSpawnMixin",
         "MobSpawnCancelMixin",
+        "ReloadableServerResourcesMixin",
         "WitherBossDespawnMixin"
     ],
     "client": [

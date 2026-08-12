@@ -262,10 +262,20 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
      * This should be called for ALL listeners from common setup.
      */
     public void registerToBus() {
+        this.registerToBus(new DynamicRegistry<?>[0]);
+    }
+
+    /**
+     * Registers this listener with explicit dynamic-registry dependencies.
+     * <p>
+     * Each dependency is guaranteed to finish applying before this registry begins decoding its entries.
+     * Use this whenever this registry's codec resolves values from another {@link DynamicRegistry}.
+     */
+    public void registerToBus(DynamicRegistry<?>... dependencies) {
         if (this.serializer.isSynced()) {
             SyncManagement.registerForSync(this);
         }
-        DynRegPlatform.registerReloadListener(this.id, this);
+        DynRegPlatform.registerReloadListener(this.id, this, java.util.Arrays.stream(dependencies).map(DynamicRegistry::getId).toList());
     }
 
     /**
