@@ -7,6 +7,7 @@ import net.neoforged.neoforge.event.ItemStackedOnOtherEvent;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
+import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEquipmentChangeEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
@@ -136,6 +137,18 @@ public class NeoForgeEventBridge {
         boolean handled = PlaceboEvents.fireItemStackedOnOther(e.getCarriedItem(), e.getStackedOnItem(), e.getSlot(),
             e.getClickAction(), e.getPlayer(), e.getCarriedSlotAccess());
         if (handled) {
+            e.setCanceled(true);
+        }
+    }
+
+    /**
+     * The bridge occupies {@code HIGH}, the earliest priority used by a migrated consumer. Listeners on the
+     * common event retain their relative priorities; if one cancels, the NeoForge event is cancelled before
+     * lower-priority native listeners run, just as it was when that listener subscribed directly.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void projectileImpact(ProjectileImpactEvent e) {
+        if (PlaceboEvents.fireProjectileImpact(e.getProjectile(), e.getRayTraceResult())) {
             e.setCanceled(true);
         }
     }

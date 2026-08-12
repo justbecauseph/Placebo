@@ -20,6 +20,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.SlotAccess;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.inventory.ClickAction;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemInstance;
@@ -29,6 +30,7 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.HitResult;
 
 /**
  * Loader-neutral events for the cases NeoForge has and Fabric does not.
@@ -987,6 +989,33 @@ public class PlaceboEvents {
      */
     public static void fireEquipmentChange(LivingEntity entity, EquipmentSlot slot, ItemStack to) {
         LIVING_EQUIPMENT_CHANGE.invoker().changed(entity, slot, to);
+    }
+
+    /**
+     * Fired immediately before a projectile applies a non-miss hit result.
+     * <p>
+     * NeoForge counterpart: {@code ProjectileImpactEvent}. Vanilla implements its seven projectile families
+     * differently, so Fabric fires this at their individual {@code hitTargetOrDeflectSelf} call sites rather
+     * than trying to turn {@code Projectile} itself into a global hook.
+     * <p>
+     * Returning {@link EventResult#interruptFalse()} cancels the impact and lets the projectile continue on
+     * its vanilla path. The context is deliberately only the projectile and hit result: those are the only
+     * members consumed anywhere in this stack.
+     */
+    public static final Event<ProjectileImpact> PROJECTILE_IMPACT = EventFactory.createEventResult();
+
+    @FunctionalInterface
+    public interface ProjectileImpact {
+        EventResult impact(Projectile projectile, HitResult hitResult);
+    }
+
+    /**
+     * Fires {@link #PROJECTILE_IMPACT}. Called by the platform bridge, not by mods.
+     *
+     * @return true when vanilla should skip this impact.
+     */
+    public static boolean fireProjectileImpact(Projectile projectile, HitResult hitResult) {
+        return PROJECTILE_IMPACT.invoker().impact(projectile, hitResult).isFalse();
     }
 
 }

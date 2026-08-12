@@ -6,12 +6,16 @@
         "defaultRequire": 1
     },
     "mixins": [
+        "AbstractArrowProjectileImpactMixin",
         "AbstractContainerMenuStackedOnMixin",
         "AbstractCubeMobSplitMixin",
+        "AbstractHurtingProjectileImpactMixin",
         "BlockDropsMixin",
         "EnchantmentHelperMixin",
         "EntityDropCaptureMixin",
         "EntityInvulnerabilityMixin",
+        "FireworkRocketProjectileImpactMixin",
+        "FishingHookProjectileImpactMixin",
         "ItemStackMixin",
         "LivingEntityDropsMixin",
         "LivingEntityEquipmentMixin",
@@ -19,10 +23,13 @@
         "LivingEntityHealMixin",
         "LivingEntityShieldBlockMixin",
         "LivingEntityUseItemMixin",
+        "LlamaSpitProjectileImpactMixin",
         "MobDespawnMixin",
         "MobFinalizeSpawnMixin",
         "MobSpawnCancelMixin",
         "ReloadableServerResourcesMixin",
+        "ShulkerBulletProjectileImpactMixin",
+        "ThrowableProjectileImpactMixin",
         "WitherBossDespawnMixin"
     ],
     "client": [
