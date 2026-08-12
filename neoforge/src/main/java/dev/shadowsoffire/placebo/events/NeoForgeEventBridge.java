@@ -16,6 +16,7 @@ import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
 import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent;
 import net.neoforged.neoforge.event.entity.living.MobDespawnEvent;
 import net.neoforged.neoforge.event.entity.living.MobSplitEvent;
+import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
 /**
  * Bridges NeoForge's events onto {@link PlaceboEvents}.
@@ -151,6 +152,11 @@ public class NeoForgeEventBridge {
         if (PlaceboEvents.fireProjectileImpact(e.getProjectile(), e.getRayTraceResult())) {
             e.setCanceled(true);
         }
+    }
+
+    @SubscribeEvent
+    public void entityTickPost(EntityTickEvent.Post e) {
+        PlaceboEvents.fireEntityTickPost(e.getEntity());
     }
 
 }

@@ -14,6 +14,7 @@
         "EnchantmentHelperMixin",
         "EntityDropCaptureMixin",
         "EntityInvulnerabilityMixin",
+        "EntityRideTickMixin",
         "FireworkRocketProjectileImpactMixin",
         "FishingHookProjectileImpactMixin",
         "ItemStackMixin",
@@ -28,6 +29,7 @@
         "MobFinalizeSpawnMixin",
         "MobSpawnCancelMixin",
         "ReloadableServerResourcesMixin",
+        "ServerLevelEntityTickMixin",
         "ShulkerBulletProjectileImpactMixin",
         "ThrowableProjectileImpactMixin",
         "WitherBossDespawnMixin"

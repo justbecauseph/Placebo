@@ -1018,4 +1018,24 @@ public class PlaceboEvents {
         return PROJECTILE_IMPACT.invoker().impact(projectile, hitResult).isFalse();
     }
 
+    /**
+     * Fired after an entity completes its regular tick, including while it is riding another entity.
+     * <p>
+     * This mirrors NeoForge's {@code EntityTickEvent.Post}. It intentionally has no cancellation: the
+     * vanilla tick has already completed by the time listeners run.
+     */
+    public static final Event<EntityTickPost> ENTITY_TICK_POST = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface EntityTickPost {
+        void tick(Entity entity);
+    }
+
+    /**
+     * Fires {@link #ENTITY_TICK_POST}. Called by the platform bridge, not by mods.
+     */
+    public static void fireEntityTickPost(Entity entity) {
+        ENTITY_TICK_POST.invoker().tick(entity);
+    }
+
 }
