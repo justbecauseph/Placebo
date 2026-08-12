@@ -98,6 +98,7 @@ public class PlaceboFabric implements ModInitializer {
         PayloadHelper.registerPayload(new DynRegPayloads.Content.Provider<>());
         PayloadHelper.registerPayload(new DynRegPayloads.End.Provider());
         PayloadHelper.registerPayload(new TagSyncPayload.Provider());
+        PayloadHelper.registerPayload(new FabricDataMaps.SyncPayload.Provider());
         PayloadHelper.registerPayload(new ButtonClickPayload.Provider());
         PayloadHelper.registerPayload(new PatreonDisablePayload.Provider());
 
