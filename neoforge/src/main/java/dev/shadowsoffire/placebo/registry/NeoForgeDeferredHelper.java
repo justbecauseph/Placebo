@@ -17,6 +17,8 @@ import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForgeMod;
+import net.neoforged.neoforge.common.loot.IGlobalLootModifier;
+import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 import net.neoforged.neoforge.registries.NewRegistryEvent;
 import net.neoforged.neoforge.registries.RegistryBuilder;
@@ -51,6 +53,9 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
     /** Data map types staged for the {@link RegisterDataMapTypesEvent}. */
     private final java.util.List<DataMapType<?, ?>> pendingDataMaps = new java.util.ArrayList<>();
 
+    /** NeoForge owns this registry; Architectury cannot resolve it before the loader publishes it. */
+    private final DeferredRegister<MapCodec<? extends IGlobalLootModifier>> lootModifierSerializers;
+
     public NeoForgeDeferredHelper(String modid) {
         super(modid);
         // Hooks the @SubscribeEvent methods below onto the owning mod's bus. Every consumer used to do this
@@ -58,7 +63,11 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
         // import was the last thing keeping some registry-object classes on the platform side. Doing it here
         // is also harder to forget: a helper that is never registered silently loses its custom registries
         // and data maps.
-        EventBusesHooks.whenAvailable(modid, bus -> bus.register(this));
+        this.lootModifierSerializers = DeferredRegister.create(NeoForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, modid);
+        EventBusesHooks.whenAvailable(modid, bus -> {
+            bus.register(this);
+            this.lootModifierSerializers.register(bus);
+        });
     }
 
     <T> void registerRegistry(ResourceKey<? extends Registry<T>> key, Registry<T> registry) {
@@ -90,7 +99,7 @@ public class NeoForgeDeferredHelper extends DeferredHelper {
     @Override
     protected void registerLootModifier(Identifier id, MapCodec<? extends LootModifier> codec) {
         MapCodec<NeoForgeLootModifier> wrapped = NeoForgeLootModifier.wrap(codec);
-        this.register(id.getPath(), NeoForgeRegistries.Keys.GLOBAL_LOOT_MODIFIER_SERIALIZERS, () -> wrapped);
+        this.lootModifierSerializers.register(id.getPath(), () -> wrapped);
     }
 
 

@@ -12,6 +12,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.jetbrains.annotations.Nullable;
 
+import dev.architectury.registry.registries.RegistrySupplier;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.core.HolderLookup;
@@ -205,7 +206,7 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
      * During 26.1 datagen, default components may not yet be bound on registered items, so this helper
      * avoids constructing an {@link ItemStack} and instead builds the template directly from a holder.
      *
-     * @param thing A candidate object. One of {@link ItemStackTemplate}, {@link ItemStack}, {@link ItemLike}, or a {@link Holder} containing an {@link ItemLike}.
+     * @param thing A candidate object. One of {@link ItemStackTemplate}, {@link ItemStack}, {@link ItemLike}, a {@link RegistrySupplier}, or a {@link Holder} containing an {@link ItemLike}.
      * @throws IllegalArgumentException if the type of object is unknown.
      */
     @SuppressWarnings("deprecation")
@@ -215,6 +216,9 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
         }
         if (thing instanceof ItemStack stack) {
             return new ItemStackTemplate(stack.getItem(), stack.getCount(), stack.getComponentsPatch());
+        }
+        if (thing instanceof RegistrySupplier<?> supplier && supplier.get() instanceof ItemLike il) {
+            return new ItemStackTemplate(il.asItem().builtInRegistryHolder(), 1, DataComponentPatch.EMPTY);
         }
         if (thing instanceof ItemLike il) {
             return new ItemStackTemplate(il.asItem().builtInRegistryHolder(), 1, DataComponentPatch.EMPTY);
@@ -288,6 +292,9 @@ public abstract class LegacyRecipeProvider extends RecipeProvider.Runner {
                 else {
                     ingredient = DataComponentIngredient.of(false, stack);
                 }
+            }
+            else if (input instanceof RegistrySupplier<?> supplier && supplier.get() instanceof ItemLike il) {
+                ingredient = Ingredient.of(il.asItem());
             }
             else if (input instanceof ItemLike il) {
                 ingredient = Ingredient.of(il.asItem());

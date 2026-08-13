@@ -20,7 +20,12 @@ public class NeoForgeRegistryFactory implements DeferredHelper.RegistryFactory {
         SpecImpl<T> spec = new SpecImpl<>(new RegistryBuilder<>(key));
         config.apply(spec);
         Registry<T> registry = spec.inner.create();
-        ((NeoForgeDeferredHelper) owner).registerRegistry(key, registry);
+        if (owner instanceof NeoForgeDeferredHelper helper) {
+            helper.registerRegistry(key, registry);
+        }
+        else {
+            NeoForgeRegistrationQueues.registerRegistry(owner, registry);
+        }
         return registry;
     }
 

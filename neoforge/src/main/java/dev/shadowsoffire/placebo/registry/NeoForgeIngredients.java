@@ -3,6 +3,7 @@ package dev.shadowsoffire.placebo.registry;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import dev.architectury.platform.hooks.EventBusesHooks;
 import dev.shadowsoffire.placebo.crafting.CustomIngredient;
 import dev.shadowsoffire.placebo.crafting.IngredientType;
 import net.minecraft.core.Holder;
@@ -12,6 +13,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.display.SlotDisplay;
 import net.neoforged.neoforge.common.crafting.ICustomIngredient;
+import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 /**
@@ -31,6 +33,10 @@ public class NeoForgeIngredients implements IngredientType.Impl {
     private static final Map<IngredientType<?>, net.neoforged.neoforge.common.crafting.IngredientType<?>> TYPES =
         new java.util.IdentityHashMap<>();
 
+    /** One direct NeoForge queue per owning mod; this registry is unavailable to Architectury at construction time. */
+    private static final Map<DeferredHelper, DeferredRegister<net.neoforged.neoforge.common.crafting.IngredientType<?>>> REGISTERS =
+        new java.util.IdentityHashMap<>();
+
     @Override
     @SuppressWarnings({ "unchecked", "rawtypes" })
     public <T extends CustomIngredient> void register(DeferredHelper owner, Identifier id, IngredientType<T> type) {
@@ -38,9 +44,16 @@ public class NeoForgeIngredients implements IngredientType.Impl {
             type.codec().xmap(Wrapped::new, w -> (T) w.delegate()),
             type.streamCodec().map(Wrapped::new, w -> (T) w.delegate()));
         TYPES.put(type, neoType);
-        // Staged on the declaring helper, not on a helper of our own: NeoForge flushes each helper's
-        // registrations from that helper's own event listener.
-        owner.register(id.getPath(), NeoForgeRegistries.Keys.INGREDIENT_TYPES, () -> neoType);
+        register(owner).register(id.getPath(), () -> neoType);
+    }
+
+    private static synchronized DeferredRegister<net.neoforged.neoforge.common.crafting.IngredientType<?>> register(DeferredHelper owner) {
+        return REGISTERS.computeIfAbsent(owner, helper -> {
+            DeferredRegister<net.neoforged.neoforge.common.crafting.IngredientType<?>> register =
+                DeferredRegister.create(NeoForgeRegistries.Keys.INGREDIENT_TYPES, helper.modid);
+            EventBusesHooks.whenAvailable(helper.modid, register::register);
+            return register;
+        });
     }
 
     @Override

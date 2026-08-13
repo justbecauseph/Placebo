@@ -23,9 +23,13 @@ public class NeoForgeDataMaps implements DeferredHelper.DataMapFactory {
         var builder = DataMapType.builder(id, (ResourceKey<Registry<K>>) spec.registry(), spec.codec());
         spec.networkCodec().ifPresent(net -> builder.synced(net, spec.mandatorySync()));
         DataMapType<K, V> type = builder.build();
-        // Announced from the declaring helper's own RegisterDataMapTypesEvent listener; see the note on
-        // DataMapFactory for why the owner has to be threaded through rather than assumed.
-        ((NeoForgeDeferredHelper) owner).registerDataMap(ResourceKey.create(NeoForgeDeferredHelper.DATA_MAP_KEY, id), type);
+        // A helper created during FML's parallel construction may predate the platform subtype factory.
+        if (owner instanceof NeoForgeDeferredHelper helper) {
+            helper.registerDataMap(ResourceKey.create(NeoForgeDeferredHelper.DATA_MAP_KEY, id), type);
+        }
+        else {
+            NeoForgeRegistrationQueues.registerDataMap(owner, type);
+        }
         return new Delegating<>(type);
     }
 

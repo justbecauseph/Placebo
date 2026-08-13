@@ -190,7 +190,8 @@ loom {
             property 'forge.enabledGameTestNamespaces', rootProject.modid
         }
         data {
-            client()
+            clientData()
+            mainClass.set('dev.shadowsoffire.placebo.NeoForgeDataClient')
             ideConfigGenerated true
             name = "NeoForge Data"
             programArgs '--mod', rootProject.modid, '--all',
