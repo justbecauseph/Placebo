@@ -12,6 +12,7 @@
         "AbstractHurtingProjectileImpactMixin",
         "BlockDropsMixin",
         "EnchantmentHelperMixin",
+        "EnchantmentMenuMixin",
         "EntityDropCaptureMixin",
         "EntityInvulnerabilityMixin",
         "EntityRideTickMixin",

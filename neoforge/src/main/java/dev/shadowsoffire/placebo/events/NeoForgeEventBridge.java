@@ -6,6 +6,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.ItemStackedOnOtherEvent;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
+import net.neoforged.neoforge.event.enchanting.EnchantmentLevelSetEvent;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
@@ -80,6 +81,15 @@ public class NeoForgeEventBridge {
     @SubscribeEvent(priority = EventPriority.HIGH)
     public void enchantmentLevels(GetEnchantmentLevelEvent e) {
         PlaceboEvents.fireEnchantmentLevels(e.getStack(), e.getEnchantments());
+    }
+
+    /**
+     * NeoForge fires this from its patched enchanting-menu cost calculation. Passing it through retains the
+     * original NeoForge event for third-party listeners while exposing the same mutable cost to common code.
+     */
+    @SubscribeEvent
+    public void enchantmentLevelSet(EnchantmentLevelSetEvent e) {
+        e.setEnchantLevel(PlaceboEvents.fireEnchantmentLevelSet(e.getLevel(), e.getPos(), e.getEnchantRow(), e.getPower(), e.getItem(), e.getEnchantLevel()));
     }
 
     /**

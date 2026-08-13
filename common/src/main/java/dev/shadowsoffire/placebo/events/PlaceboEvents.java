@@ -330,6 +330,85 @@ public class PlaceboEvents {
     }
 
     /**
+     * Fired after an enchanting table has calculated and clamped each of its three offer costs, before those
+     * costs are used to select the displayed enchantment clues.
+     * <p>
+     * NeoForge counterpart: {@code EnchantmentLevelSetEvent}. Vanilla site: {@code EnchantmentMenu#slotsChanged}.
+     * The row is zero-based, matching the value NeoForge passes to its event despite that event's older docs
+     * describing the rows as one through three.
+     * <p>
+     * <b>Not cancellable.</b> Listeners change an offer with {@link EnchantmentLevelSetContext#setEnchantLevel};
+     * the updated value is then used for both the displayed clue and the cost charged when it is selected.
+     */
+    public static final Event<EnchantmentLevelSet> ENCHANTMENT_LEVEL_SET = EventFactory.createLoop();
+
+    @FunctionalInterface
+    public interface EnchantmentLevelSet {
+        void modify(EnchantmentLevelSetContext ctx);
+    }
+
+    /** Mutable state for {@link #ENCHANTMENT_LEVEL_SET}, matching NeoForge's event fields. */
+    public static final class EnchantmentLevelSetContext {
+
+        private final net.minecraft.world.level.Level level;
+        private final BlockPos pos;
+        private final int enchantRow;
+        private final int power;
+        private final ItemStack item;
+        private final int originalLevel;
+        private int enchantLevel;
+
+        public EnchantmentLevelSetContext(net.minecraft.world.level.Level level, BlockPos pos, int enchantRow, int power, ItemStack item, int enchantLevel) {
+            this.level = level;
+            this.pos = pos;
+            this.enchantRow = enchantRow;
+            this.power = power;
+            this.item = item;
+            this.originalLevel = enchantLevel;
+            this.enchantLevel = enchantLevel;
+        }
+
+        public net.minecraft.world.level.Level getLevel() {
+            return this.level;
+        }
+
+        public BlockPos getPos() {
+            return this.pos;
+        }
+
+        public int getEnchantRow() {
+            return this.enchantRow;
+        }
+
+        public int getPower() {
+            return this.power;
+        }
+
+        public ItemStack getItem() {
+            return this.item;
+        }
+
+        public int getOriginalLevel() {
+            return this.originalLevel;
+        }
+
+        public int getEnchantLevel() {
+            return this.enchantLevel;
+        }
+
+        public void setEnchantLevel(int level) {
+            this.enchantLevel = level;
+        }
+    }
+
+    /** Fires {@link #ENCHANTMENT_LEVEL_SET} and returns the level its listeners selected. */
+    public static int fireEnchantmentLevelSet(net.minecraft.world.level.Level level, BlockPos pos, int enchantRow, int power, ItemStack item, int enchantLevel) {
+        EnchantmentLevelSetContext ctx = new EnchantmentLevelSetContext(level, pos, enchantRow, power, item, enchantLevel);
+        ENCHANTMENT_LEVEL_SET.invoker().modify(ctx);
+        return ctx.getEnchantLevel();
+    }
+
+    /**
      * Fires {@link #ENCHANTMENT_LEVELS} for a single enchantment. Called by the platform bridge, not by mods.
      *
      * @return the level of {@code ench} after listeners have run.
