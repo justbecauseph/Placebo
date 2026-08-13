@@ -9,6 +9,7 @@ import dev.architectury.event.events.common.TickEvent;
 import dev.shadowsoffire.placebo.attachment.DataAttachment;
 import dev.shadowsoffire.placebo.attachment.FabricDataAttachment;
 import dev.shadowsoffire.placebo.commands.PlaceboCommand;
+import dev.shadowsoffire.placebo.color.GradientColor;
 import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.FabricDynReg;
@@ -34,6 +35,7 @@ import dev.shadowsoffire.placebo.util.FakePlayerHelper;
 import dev.shadowsoffire.placebo.util.MobSpawnHelper;
 import dev.shadowsoffire.placebo.util.PersistentData;
 import dev.shadowsoffire.placebo.util.PlaceboTaskQueue;
+import dev.shadowsoffire.placebo.util.PlaceboUtil;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.minecraft.network.chat.TextColor;
@@ -48,7 +50,7 @@ import net.minecraft.world.entity.Mob;
  * <table>
  * <tr><th>NeoForge does</th><th>Fabric status</th></tr>
  * <tr><td>{@code MixRegistry}</td><td>Platform-side: it reaches into {@code PotionBrewing} internals.</td></tr>
- * <tr><td>{@code GradientColor.RAINBOW}</td><td>Platform-side with the rest of the colour handling.</td></tr>
+ * <tr><td>{@code GradientColor.RAINBOW}</td><td>Registered during Fabric bootstrap after copying the mutable named-colour map.</td></tr>
  * <tr><td>Dynamic tag <em>loading</em></td><td>Needs {@code TagFile.remove()}, a NeoForge added field. Tag <em>syncing</em> works.</td></tr>
  * </table>
  *
@@ -85,6 +87,7 @@ public class PlaceboFabric implements ModInitializer {
         // Vanilla hands out an immutable map and Placebo adds named colours to it. The access widener makes
         // the field writable on both loaders.
         TextColor.NAMED_COLORS = new HashMap<>(TextColor.NAMED_COLORS);
+        PlaceboUtil.registerCustomColor(GradientColor.RAINBOW);
 
         // Installs the dynreg hooks, including the datapack-sync listener.
         FabricDynReg.install();
