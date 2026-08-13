@@ -112,9 +112,11 @@ public class PlaceboNeoForge {
     }
 
     public void serverReload(AddServerReloadListenersEvent e) {
+        // SortedReloadListenerEvent validates dependency targets when they are declared. Dynamic
+        // registries must therefore see the tag manager before they can order themselves before it.
+        e.addListener(DynamicTagManager.ID, DynamicTagManager.INSTANCE);
         NeoForgeDynReg.addReloadListeners(e);
         e.addListener(Placebo.loc("placebo_reload_event"), (ResourceManagerReloadListener) res -> NeoForge.EVENT_BUS.post(new ResourceReloadEvent(res, LogicalSide.SERVER)));
-        e.addListener(DynamicTagManager.ID, DynamicTagManager.INSTANCE);
     }
 
     public void serverStart(ServerAboutToStartEvent e) {
