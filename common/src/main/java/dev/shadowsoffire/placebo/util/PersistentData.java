@@ -24,11 +24,9 @@ import net.minecraft.world.entity.Entity;
  * cross-mod one, so another mod writing to its own persistent data will not be visible here. Nothing in this
  * stack reads another mod's keys.
  * <p>
- * <b>Unverified at runtime:</b> the returned tag is live on both loaders and mutating it in place is expected
- * to persist -- NeoForge saves its own tag, and Fabric serializes the attached instance on save. Fabric's docs
- * say in-place mutation of an attachment needs the target marked changed, which entities do not expose. If
- * persistence turns out to be lost across a save, the fix is to re-{@code setAttached} after each mutation,
- * which would mean this returning a wrapper rather than the raw tag.
+ * The returned tag is live on both loaders. A full-stack Fabric GameTest mutates this tag in place, serializes
+ * its entity, loads a new entity from that data and reads the mutation back successfully. Entity persistence
+ * therefore needs neither a wrapper nor a follow-up {@code setAttached} call.
  */
 public class PersistentData {
 
