@@ -31,6 +31,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Loader-neutral events for the cases NeoForge has and Fabric does not.
@@ -1280,6 +1281,77 @@ public class PlaceboEvents {
     /** Fires {@link #LIVING_DAMAGE_POST}. */
     public static void fireLivingDamagePost(LivingDamagePostContext ctx) {
         LIVING_DAMAGE_POST.invoker().damage(ctx);
+    }
+
+    /**
+     * Fired at the five vanilla teleport sites patched by NeoForge: teleport and spread-player commands,
+     * living-entity random teleports, ender pearls, and shulkers. Listeners may rewrite the destination or
+     * return {@link EventResult#interruptFalse()} to cancel the teleport.
+     */
+    public static final Event<EntityTeleport> ENTITY_TELEPORT = EventFactory.createEventResult();
+
+    @FunctionalInterface
+    public interface EntityTeleport {
+        EventResult teleport(EntityTeleportContext ctx);
+    }
+
+    /** Mutable destination for one entity teleport. */
+    public static final class EntityTeleportContext {
+
+        private final Entity entity;
+        private final ServerLevel targetLevel;
+        private double targetX;
+        private double targetY;
+        private double targetZ;
+
+        public EntityTeleportContext(Entity entity, ServerLevel targetLevel, double targetX, double targetY, double targetZ) {
+            this.entity = entity;
+            this.targetLevel = targetLevel;
+            this.targetX = targetX;
+            this.targetY = targetY;
+            this.targetZ = targetZ;
+        }
+
+        public Entity getEntity() {
+            return this.entity;
+        }
+
+        public ServerLevel getTargetLevel() {
+            return this.targetLevel;
+        }
+
+        public double getTargetX() {
+            return this.targetX;
+        }
+
+        public void setTargetX(double targetX) {
+            this.targetX = targetX;
+        }
+
+        public double getTargetY() {
+            return this.targetY;
+        }
+
+        public void setTargetY(double targetY) {
+            this.targetY = targetY;
+        }
+
+        public double getTargetZ() {
+            return this.targetZ;
+        }
+
+        public void setTargetZ(double targetZ) {
+            this.targetZ = targetZ;
+        }
+
+        public Vec3 getTarget() {
+            return new Vec3(this.targetX, this.targetY, this.targetZ);
+        }
+    }
+
+    /** Fires {@link #ENTITY_TELEPORT}; a false result means the caller must skip the teleport. */
+    public static boolean fireEntityTeleport(EntityTeleportContext ctx) {
+        return !ENTITY_TELEPORT.invoker().teleport(ctx).isFalse();
     }
 
 }

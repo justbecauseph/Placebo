@@ -8,6 +8,7 @@ import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
 import net.neoforged.neoforge.event.enchanting.EnchantmentLevelSetEvent;
 import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
+import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEquipmentChangeEvent;
@@ -169,6 +170,20 @@ public class NeoForgeEventBridge {
     @SubscribeEvent
     public void entityTickPost(EntityTickEvent.Post e) {
         PlaceboEvents.fireEntityTickPost(e.getEntity());
+    }
+
+    @SubscribeEvent
+    public void entityTeleport(EntityTeleportEvent e) {
+        PlaceboEvents.EntityTeleportContext ctx = new PlaceboEvents.EntityTeleportContext(e.getEntity(), e.getTargetLevel(),
+            e.getTargetX(), e.getTargetY(), e.getTargetZ());
+        if (!PlaceboEvents.fireEntityTeleport(ctx)) {
+            e.setCanceled(true);
+        }
+        else {
+            e.setTargetX(ctx.getTargetX());
+            e.setTargetY(ctx.getTargetY());
+            e.setTargetZ(ctx.getTargetZ());
+        }
     }
 
     /**

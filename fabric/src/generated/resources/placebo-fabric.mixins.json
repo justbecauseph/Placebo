@@ -26,6 +26,7 @@
         "LivingEntityHealMixin",
         "LivingEntityIncomingDamageMixin",
         "LivingEntityShieldBlockMixin",
+        "LivingEntityTeleportMixin",
         "LivingEntityUseItemMixin",
         "LlamaSpitProjectileImpactMixin",
         "MobDespawnMixin",
@@ -34,7 +35,11 @@
         "ReloadableServerResourcesMixin",
         "ServerLevelEntityTickMixin",
         "ShulkerBulletProjectileImpactMixin",
+        "ShulkerTeleportMixin",
+        "SpreadPlayersCommandMixin",
+        "TeleportCommandMixin",
         "ThrowableProjectileImpactMixin",
+        "ThrownEnderpearlTeleportMixin",
         "WitherBossDespawnMixin"
     ],
     "client": [
