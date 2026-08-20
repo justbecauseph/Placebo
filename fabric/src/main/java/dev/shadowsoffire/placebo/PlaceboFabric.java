@@ -1,6 +1,8 @@
 package dev.shadowsoffire.placebo;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import dev.architectury.event.EventResult;
 import dev.architectury.event.events.common.EntityEvent;
@@ -27,6 +29,7 @@ import dev.shadowsoffire.placebo.registry.FabricDeferredHelper;
 import dev.shadowsoffire.placebo.registry.FabricIngredients;
 import dev.shadowsoffire.placebo.registry.FabricRegistryFactory;
 import dev.shadowsoffire.placebo.systems.gear.GearSetRegistry;
+import dev.shadowsoffire.placebo.systems.mixes.MixRegistry;
 import dev.shadowsoffire.placebo.tabs.FabricTabFillContext;
 import dev.shadowsoffire.placebo.util.FabricFakePlayerHelper;
 import dev.shadowsoffire.placebo.util.FabricMobSpawnHelper;
@@ -37,22 +40,21 @@ import dev.shadowsoffire.placebo.util.PersistentData;
 import dev.shadowsoffire.placebo.util.PlaceboTaskQueue;
 import dev.shadowsoffire.placebo.util.PlaceboUtil;
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.api.EnvType;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.item.alchemy.PotionBrewing;
 
 /**
  * Fabric entrypoint, the counterpart to {@code PlaceboNeoForge}.
  * <p>
- * Still missing relative to NeoForge, each for a stated reason:
- *
- * <table>
- * <tr><th>NeoForge does</th><th>Fabric status</th></tr>
- * <tr><td>{@code MixRegistry}</td><td>Platform-side: it reaches into {@code PotionBrewing} internals.</td></tr>
- * <tr><td>{@code GradientColor.RAINBOW}</td><td>Registered during Fabric bootstrap after copying the mutable named-colour map.</td></tr>
- * <tr><td>Dynamic tag <em>loading</em></td><td>Needs {@code TagFile.remove()}, a NeoForge added field. Tag <em>syncing</em> works.</td></tr>
- * </table>
+ * Loader-neutral systems keep their policy in common while this class supplies Fabric lifecycle and API adapters.
+ * Brewing mixes use the same dynamic registry and vanilla {@code PotionBrewing} mutation policy as NeoForge;
+ * only discovery of the live client/server brewing instances is loader-specific.
  *
  * <h2>Registration ordering</h2>
  * Dependent entrypoints call {@link #bootstrap()} before touching common registration code because Fabric's
@@ -61,6 +63,7 @@ import net.minecraft.world.entity.Mob;
 public class PlaceboFabric implements ModInitializer {
 
     private static boolean initialized;
+    private static MinecraftServer server;
 
     @Override
     public void onInitialize() {
@@ -91,6 +94,7 @@ public class PlaceboFabric implements ModInitializer {
 
         // Installs the dynreg hooks, including the datapack-sync listener.
         FabricDynReg.install();
+        MixRegistry.setBrewingResolver(PlaceboFabric::resolveBrewing);
 
         // Fabric initializes Placebo before its dependents. Register providers immediately so dependent mods
         // can keep using PayloadHelper from their own entrypoints.
@@ -107,6 +111,7 @@ public class PlaceboFabric implements ModInitializer {
 
         // Gear sets are a plain dynamic registry, so they work as soon as dynreg does.
         GearSetRegistry.INSTANCE.registerToBus();
+        MixRegistry.INSTANCE.registerToBus();
 
         // PlaceboCommand is already common and takes vanilla types, so this is a direct wire-up.
         CommandRegistrationCallback.EVENT.register((dispatcher, ctx, env) -> PlaceboCommand.register(dispatcher, ctx));
@@ -139,11 +144,28 @@ public class PlaceboFabric implements ModInitializer {
         });
 
         // PlaceboTaskQueue: clear on server start/stop, tick every server tick.
-        LifecycleEvent.SERVER_STARTED.register(server -> PlaceboTaskQueue.onServerStart());
-        LifecycleEvent.SERVER_STOPPED.register(server -> PlaceboTaskQueue.onServerStop());
+        LifecycleEvent.SERVER_STARTED.register(startedServer -> {
+            server = startedServer;
+            MixRegistry.applyMixes();
+            PlaceboTaskQueue.onServerStart();
+        });
+        LifecycleEvent.SERVER_STOPPED.register(stoppedServer -> {
+            server = null;
+            PlaceboTaskQueue.onServerStop();
+        });
         TickEvent.SERVER_POST.register(server -> PlaceboTaskQueue.tick());
 
         Placebo.LOGGER.info("Placebo (Fabric) initialized.");
+    }
+
+    private static List<PotionBrewing> resolveBrewing() {
+        List<PotionBrewing> registries = new ArrayList<>();
+        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
+            PotionBrewing clientBrewing = PlaceboClient.getBrewingRegistry();
+            if (clientBrewing != null) registries.add(clientBrewing);
+        }
+        if (server != null) registries.add(server.potionBrewing());
+        return registries;
     }
 
 }

@@ -1,7 +1,8 @@
 package dev.shadowsoffire.placebo;
 
+import java.util.ArrayList;
 import java.util.HashMap;
-
+import java.util.List;
 
 import dev.shadowsoffire.placebo.color.GradientColor;
 import dev.shadowsoffire.placebo.commands.PlaceboCommand;
@@ -41,21 +42,25 @@ import dev.shadowsoffire.placebo.util.PlaceboUtil;
 import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
+import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.LogicalSide;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 @Mod(Placebo.MODID)
 @SuppressWarnings("deprecation")
 public class PlaceboNeoForge {
 
     public PlaceboNeoForge(IEventBus bus) {
+        MixRegistry.setBrewingResolver(PlaceboNeoForge::resolveBrewing);
         bus.register(this);
         NeoForgeDynReg.install();
         DeferredHelper.setFactory(NeoForgeDeferredHelper::new);
@@ -85,6 +90,19 @@ public class PlaceboNeoForge {
         });
 
         PlaceboConfig.load();
+    }
+
+    private static List<PotionBrewing> resolveBrewing() {
+        List<PotionBrewing> registries = new ArrayList<>();
+        if (FMLEnvironment.getDist().isClient()) {
+            PotionBrewing clientBrewing = PlaceboClient.getBrewingRegistry();
+            if (clientBrewing != null) registries.add(clientBrewing);
+        }
+
+        if (ServerLifecycleHooks.getCurrentServer() != null) {
+            registries.add(ServerLifecycleHooks.getCurrentServer().potionBrewing());
+        }
+        return registries;
     }
 
     @SubscribeEvent

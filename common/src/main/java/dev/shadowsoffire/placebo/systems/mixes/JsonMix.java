@@ -12,10 +12,10 @@ import net.minecraft.world.item.crafting.Ingredient;
 
 public record JsonMix<T>(Type type, PotionBrewing.Mix<T> mix) {
 
-    public static Codec<JsonMix<?>> CODEC = PlaceboCodecs.enumCodec(Type.class).dispatch("mix_type", JsonMix::type, Type::codec);
+    public static final Codec<JsonMix<?>> CODEC = PlaceboCodecs.enumCodec(Type.class).dispatch("mix_type", JsonMix::type, Type::codec);
 
-    public JsonMix(Holder<T> pFrom, Ingredient pIngredient, Holder<T> pTo, Type mixType) {
-        this(mixType, new PotionBrewing.Mix<>(pFrom, pIngredient, pTo));
+    public JsonMix(Holder<T> from, Ingredient ingredient, Holder<T> to, Type mixType) {
+        this(mixType, new PotionBrewing.Mix<>(from, ingredient, to));
     }
 
     public static enum Type {
@@ -39,11 +39,7 @@ public record JsonMix<T>(Type type, PotionBrewing.Mix<T> mix) {
                     elementCodec.fieldOf("from").forGetter(m -> m.mix.from()),
                     Ingredient.CODEC.fieldOf("ingredient").forGetter(m -> m.mix.ingredient()),
                     elementCodec.fieldOf("to").forGetter(m -> m.mix.to()))
-                .apply(inst, (from, ingredient, to) -> new JsonMix<>(from, ingredient, to, type))
-
-            );
-
+                .apply(inst, (from, ingredient, to) -> new JsonMix<>(from, ingredient, to, type)));
         }
     }
-
 }
