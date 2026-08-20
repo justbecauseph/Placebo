@@ -3,6 +3,7 @@ package dev.shadowsoffire.placebo.client;
 import dev.shadowsoffire.placebo.Placebo;
 import dev.shadowsoffire.placebo.PlaceboClient;
 import dev.shadowsoffire.placebo.events.ResourceReloadEvent;
+import dev.shadowsoffire.placebo.events.ResourceReloadCallbacks;
 import dev.shadowsoffire.placebo.network.ClientPayloadSender;
 import dev.shadowsoffire.placebo.network.NeoForgeClientPayloadSender;
 import dev.shadowsoffire.placebo.patreon.TrailsManager;
@@ -68,7 +69,10 @@ public class NeoForgeClientEvents {
 
     @SubscribeEvent
     public static void clientResource(AddClientReloadListenersEvent e) {
-        e.addListener(Placebo.loc("client_reload_event"), (ResourceManagerReloadListener) res -> NeoForge.EVENT_BUS.post(new ResourceReloadEvent(res, LogicalSide.CLIENT)));
+        e.addListener(Placebo.loc("client_reload_event"), (ResourceManagerReloadListener) res -> {
+            NeoForge.EVENT_BUS.post(new ResourceReloadEvent(res, LogicalSide.CLIENT));
+            ResourceReloadCallbacks.fireClient(res);
+        });
     }
 
     @SubscribeEvent

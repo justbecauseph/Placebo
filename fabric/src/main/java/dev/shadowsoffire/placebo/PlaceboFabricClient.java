@@ -1,9 +1,11 @@
 package dev.shadowsoffire.placebo;
 
 import dev.architectury.event.events.client.ClientTickEvent;
+import dev.architectury.registry.ReloadListenerRegistry;
 import dev.architectury.registry.client.keymappings.KeyMappingRegistry;
 import dev.architectury.registry.client.level.entity.EntityModelLayerRegistry;
 import dev.shadowsoffire.placebo.client.FabricWingLayer;
+import dev.shadowsoffire.placebo.events.ResourceReloadCallbacks;
 import dev.shadowsoffire.placebo.network.ClientPayloadSender;
 import dev.shadowsoffire.placebo.network.FabricClientPayloadSender;
 import dev.shadowsoffire.placebo.patreon.TrailsManager;
@@ -17,6 +19,8 @@ import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityRenderLayerRegist
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 
 /**
  * Fabric's client entrypoint, the counterpart to {@code NeoForgeClientEvents} -- and the first
@@ -26,13 +30,6 @@ import net.minecraft.client.renderer.entity.player.AvatarRenderer;
  * count, what is under the cursor, and scroll while a tooltip is showing. Everything that reads them is
  * already loader-neutral, which is why {@code GradientColor} could move to {@code :common} the moment this
  * existed.
- *
- * <h2>Not yet ported</h2>
- * <ul>
- * <li><b>The client reload listener</b>, which fires Placebo's own {@code ResourceReloadEvent} for client
- * resources. {@code ResourceManagerHelper} for {@code PackType.CLIENT_RESOURCES} is the equivalent.
- * </ul>
- *
  * <h2>The scroll pair</h2>
  * NeoForge feeds the scroll decision from two events, a screen one and a raw input one, because a tooltip can
  * be showing with or without a focused screen. Fabric's screen events are per-screen rather than global, so
@@ -70,6 +67,10 @@ public class PlaceboFabricClient implements ClientModInitializer {
 
         ScreenEvents.BEFORE_INIT.register((mc, screen, width, height) -> ScreenMouseEvents.allowMouseScroll(screen)
             .register((s, mouseX, mouseY, horizontal, vertical) -> !PlaceboClient.scroll(vertical)));
+
+        ReloadListenerRegistry.register(PackType.CLIENT_RESOURCES,
+            (ResourceManagerReloadListener) ResourceReloadCallbacks::fireClient,
+            Placebo.loc("client_reload_event"));
 
         Placebo.LOGGER.info("Placebo (Fabric) client initialized.");
     }
