@@ -60,6 +60,7 @@ sourcesJar {
     def commonSources = project(":common").tasks.named("sourcesJar")
     dependsOn commonSources
     from commonSources.map { zipTree(it.archiveFile) }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
 processResources {
@@ -129,6 +130,11 @@ tasks.named('processResources') { dependsOn generateFabricMixinConfig }
 tasks.withType(Jar).configureEach { dependsOn generateFabricMixinConfig }
 
 sourceSets.main.resources {
+    // Fabric Loader resolves access wideners from this module's runtime resources. The common
+    // project is only a class/shadow dependency, so its resources must also be present for IDE
+    // launches (not just in the assembled shadow jar).
+    srcDir project(":common").file("src/main/resources")
+    srcDir project(":common").file("src/generated/resources")
     srcDir 'src/generated/resources'
 }
 
