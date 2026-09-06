@@ -4,11 +4,14 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
@@ -81,6 +84,8 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
      * thread.
      */
     private final Map<Identifier, DynamicHolderSet.Named<R>> tags = new ConcurrentHashMap<>();
+    /** Creation order is separate from the concurrent lookup map so sync can retain tag insertion order. */
+    private final List<Identifier> tagInsertionOrder = new CopyOnWriteArrayList<>();
 
     /**
      * Internal registry. Immutable when outside of the registration phase.
@@ -92,12 +97,15 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     /**
      * Staged data used during the sync process. Discarded when running an integrated server.
      */
-    final Map<Identifier, R> staged = new HashMap<>();
+    final Map<Identifier, R> staged = new LinkedHashMap<>();
 
     /**
      * Staged tag data used during the sync process. Discarded when running an integrated server.
      */
-    final Map<Identifier, List<Identifier>> stagedTags = new HashMap<>();
+    final Map<Identifier, List<Identifier>> stagedTags = new LinkedHashMap<>();
+
+    /** Monotonic token for the finalized content and tag state used by Fabric's encoded sync cache. */
+    private final AtomicLong syncRevision = new AtomicLong();
 
     /**
      * Map of all holders that have ever been requested for this registry.
@@ -216,6 +224,7 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     protected void onReload(ReloadType type) {
         this.registry = Maps.unmodifiableBiMap(this.registry);
         this.logger.info("Registered {} {}.", this.registry.size(), this.id);
+        this.syncRevision.incrementAndGet();
         this.callbacks.forEach(l -> l.onReload(this));
         this.holders.values().forEach(DynamicHolder::bind);
     }
@@ -381,7 +390,17 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
      * gives them a stable {@link DynamicHolderSet.Named} reference that becomes populated when tags load.
      */
     public final DynamicHolderSet.Named<R> getOrCreateTag(DynamicTagKey<R> key) {
-        return this.tags.computeIfAbsent(key.id(), id -> new DynamicHolderSet.Named<>(this, key));
+        return this.tags.computeIfAbsent(key.id(), id -> {
+            this.tagInsertionOrder.add(id);
+            return new DynamicHolderSet.Named<>(this, key);
+        });
+    }
+
+    /** Internal allocation-free lookup for hot selection paths; public Optional compatibility remains below. */
+    @Nullable
+    protected final DynamicHolderSet.Named<R> getBoundTag(DynamicTagKey<R> key) {
+        DynamicHolderSet.Named<R> set = this.tags.get(key.id());
+        return set != null && set.isBound() ? set : null;
     }
 
     /**
@@ -389,8 +408,8 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
      *         interned tag sets are treated as absent.
      */
     public final Optional<DynamicHolderSet.Named<R>> getTag(DynamicTagKey<R> key) {
-        DynamicHolderSet.Named<R> set = this.tags.get(key.id());
-        return set != null && set.isBound() ? Optional.of(set) : Optional.empty();
+        DynamicHolderSet.Named<R> set = this.getBoundTag(key);
+        return set == null ? Optional.empty() : Optional.of(set);
     }
 
     /**
@@ -403,10 +422,11 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
     public final void bindTags(Map<Identifier, List<Identifier>> resolved) {
         for (Map.Entry<Identifier, List<Identifier>> entry : resolved.entrySet()) {
             DynamicTagKey<R> tagKey = DynamicTagKey.create(this, entry.getKey());
-            DynamicHolderSet.Named<R> set = this.tags.computeIfAbsent(entry.getKey(), tagId -> new DynamicHolderSet.Named<>(this, tagKey));
+            DynamicHolderSet.Named<R> set = this.getOrCreateTag(tagKey);
             List<DynamicHolder<R>> holders = entry.getValue().stream().map(this::holder).toList();
             set.bind(holders);
         }
+        this.syncRevision.incrementAndGet();
     }
 
     /**
@@ -499,10 +519,11 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
      * @return The currently-bound tag content, mapping tag id → list of entry ids. Used by the sync flow to ship
      *         resolved tags to clients.
      */
-    private Map<Identifier, List<Identifier>> exportTags() {
-        Map<Identifier, List<Identifier>> result = new HashMap<>();
-        for (DynamicHolderSet.Named<R> named : this.tags.values()) {
-            if (named.isBound()) {
+    Map<Identifier, List<Identifier>> exportTags() {
+        Map<Identifier, List<Identifier>> result = new LinkedHashMap<>();
+        for (Identifier tagId : this.tagInsertionOrder) {
+            DynamicHolderSet.Named<R> named = this.tags.get(tagId);
+            if (named != null && named.isBound()) {
                 result.put(named.key().id(), named.stream().map(DynamicHolder::getId).toList());
             }
         }
@@ -514,7 +535,11 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
      * (if any tags are bound), and then the end packet.
      */
     void sync(@Nullable ServerPlayer player) {
-        DynRegPlatform.SyncHandler target = DynRegPlatform.sync();
+        DynRegPlatform.sync().sync(player, this);
+    }
+
+    /** Legacy object-by-object sync path retained for NeoForge and as the platform fallback. */
+    void syncLegacy(@Nullable ServerPlayer player, DynRegPlatform.SyncHandler target) {
 
         target.start(player, this.id);
         this.registry.forEach((k, v) -> target.content(player, this.id, k, v));
@@ -523,6 +548,11 @@ public abstract class DynamicRegistry<R> extends SimplePreparableReloadListener<
             target.tags(player, this.id, exported);
         }
         target.end(player, this.id);
+    }
+
+    /** Current finalized content/tag revision for platform sync caches. */
+    final long syncRevision() {
+        return this.syncRevision.get();
     }
 
     /**

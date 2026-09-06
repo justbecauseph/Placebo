@@ -20,4 +20,19 @@ dependencies {
     // Guava and uses them; they arrived transitively via NeoForge in the old single-project build.
     compileOnly "com.google.errorprone:error_prone_annotations:2.36.0"
     compileOnly "com.google.j2objc:j2objc-annotations:3.0.0"
+
+    testImplementation platform("org.junit:junit-bom:5.13.4")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+// Keep the fixed Fabric dispatchers covered from the common JUnit suite without moving their loader-specific
+// production sources into common. These test-only source inputs are intentionally exact files.
+tasks.named("compileTestJava") {
+    source project(":fabric").file("src/main/java/dev/shadowsoffire/placebo/events/FabricDamageDispatcher.java")
+    source project(":fabric").file("src/main/java/dev/shadowsoffire/placebo/events/FabricHealDispatcher.java")
 }

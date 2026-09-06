@@ -35,6 +35,15 @@ dependencies {
     // loom-no-remap: :common has no namedElements variant -- nothing is mapped, so depend on the plain project.
     common(project(path: ":common")) { transitive false }
     shadowCommon(project(path: ":common", configuration: "transformProductionFabric")) { transitive false }
+
+    testImplementation platform("org.junit:junit-bom:5.13.4")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+    testImplementation project(path: ":common")
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 // loom-no-remap has no remapJar task -- nothing is remapped at 26.2, so shadowJar produces the
@@ -138,7 +147,9 @@ sourceSets.main.resources {
     srcDir 'src/generated/resources'
 }
 
-if (!rootProject.enableTests.toBoolean()) {
+// Keep the default no-tests behavior for normal checkouts, while retaining a narrow Fabric test source when
+// this module explicitly carries bridge-contract tests. The Phase 6A tests invoke the exact Fabric seam.
+if (!rootProject.enableTests.toBoolean() && !file('src/test').exists()) {
     sourceSets.remove(sourceSets.test)
 }
 

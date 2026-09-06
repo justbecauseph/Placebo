@@ -2,6 +2,8 @@ package dev.shadowsoffire.placebo.util;
 
 import java.util.Objects;
 
+import org.jetbrains.annotations.Nullable;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 
@@ -50,9 +52,33 @@ public class PersistentData {
         return impl.of(entity);
     }
 
+    /**
+     * Reads the entity's persistent tag without allocating or attaching an empty tag when it is absent.
+     * This is the hot-path counterpart to {@link #of(Entity)} for optional marker checks.
+     */
+    @Nullable
+    public static CompoundTag peek(Entity entity) {
+        if (impl == null) {
+            throw new IllegalStateException("No PersistentData implementation has been installed. "
+                + "The platform entrypoint must call PersistentData.setImpl before any entity data is read.");
+        }
+        return impl.peek(entity);
+    }
+
     public interface Impl {
 
         CompoundTag of(Entity entity);
+
+        /**
+         * Reads optional entity data without creating it when the platform can provide a non-creating lookup.
+         * <p>Third-party implementations compiled against the original two-method contract remain source
+         * compatible: their default is necessarily the allocating {@link #of(Entity)} path. Fabric overrides
+         * this method with its attachment lookup, which is the guarantee used by hot-path callers.
+         */
+        @Nullable
+        default CompoundTag peek(Entity entity) {
+            return of(entity);
+        }
     }
 
 }

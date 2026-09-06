@@ -1,8 +1,5 @@
 package dev.shadowsoffire.placebo.util;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -89,8 +86,20 @@ public final class CachedObject<T> {
      * Creates a hashing function that hashes a specific subkey.
      */
     public static ToIntFunction<ItemStack> hashComponents(DataComponentType<?>... types) {
-        List<DataComponentType<?>> typeList = Arrays.asList(types);
-        return stack -> Arrays.hashCode(typeList.stream().map(stack::get).filter(Objects::nonNull).toArray());
+        return stack -> {
+            int result = 1;
+            for (DataComponentType<?> type : types) {
+                Object value = stack.get(type);
+                // Keep the historical filtered-array behavior: the old implementation removed
+                // null component values before applying Arrays.hashCode(Object[]).  Skipping the
+                // null value here is allocation-free and preserves both ordering and invalidation
+                // semantics for every existing caller.
+                if (value != null) {
+                    result = 31 * result + value.hashCode();
+                }
+            }
+            return result;
+        };
     }
 
     /**
@@ -121,6 +130,23 @@ public final class CachedObject<T> {
             return ((CachedObjectSource) (Object) stack).getOrCreate(id, deserializer, hasher);
         }
 
+    }
+
+    /**
+     * Read-only cache diagnostics supplied by the {@code ItemStack} mixin.
+     * <p>
+     * This is intentionally separate from {@link CachedObjectSource}: cache users only need
+     * {@link CachedObjectSource#getOrCreate(Identifier, Function, ToIntFunction)}, while tests and
+     * diagnostics can inspect whether a stack has allocated a cache without forcing that allocation.
+     */
+    public interface CacheInspection {
+
+        /**
+         * Returns the number of cached object entries currently allocated on the stack.
+         * <p>
+         * A stack with no cache returns {@code 0}; this method never allocates the cache map.
+         */
+        int cachedObjectCount();
     }
 
 }

@@ -1,8 +1,5 @@
 package dev.shadowsoffire.placebo.mixin;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -10,7 +7,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.sugar.Local;
+import com.llamalad7.mixinextras.sugar.Share;
+import com.llamalad7.mixinextras.sugar.ref.LocalLongRef;
 
+import dev.shadowsoffire.placebo.events.FabricDamageDispatcher;
 import dev.shadowsoffire.placebo.events.PlaceboEvents;
 import dev.shadowsoffire.placebo.events.PlaceboEvents.LivingDamagePostContext;
 import dev.shadowsoffire.placebo.events.PlaceboEvents.LivingDamagePreContext;
@@ -26,35 +26,89 @@ import net.minecraft.world.entity.player.Player;
 @Mixin(value = { LivingEntity.class, Player.class }, remap = false)
 public class LivingEntityDamageMixin {
 
-    /** Post listeners may recursively start another damage sequence, so each Pre invocation owns one stack entry. */
-    private static final ThreadLocal<Deque<LivingDamagePostContext>> PLACEBO$POST_DAMAGE = ThreadLocal.withInitial(ArrayDeque::new);
+    /*
+     * One primitive invocation-local frame carries all state across the two bytecode seams. The high word is
+     * the raw actuallyHurt input. The low word is either NO_FRAME (the hit returned before the PRE seam),
+     * NO_PRE_HEALTH (direct mode did not apply), a nonnegative pre-hit-health float, or that float with the
+     * sign bit set for a fallback invocation. The direct/fallback decision is made once at PRE, after the
+     * vanilla mitigation work that precedes that seam, and is retained through POST even if listeners change
+     * while this hit is in progress. Health is nonnegative in vanilla, which leaves its sign bit available as
+     * the fallback tag; the two NaN sentinels are never valid health values. Clearing the frame before POST
+     * also prevents a nested berserking hurt from consuming it.
+     */
+    private static final int NO_FRAME = 0x7FC0_0000;
+    private static final int NO_PRE_HEALTH = 0x7FC0_0001;
+    private static final int FALLBACK_FLAG = 0x8000_0000;
+
+    @Inject(method = "actuallyHurt", at = @At("HEAD"), remap = false)
+    private void placebo$captureLivingDamageOriginal(ServerLevel level, DamageSource source, float damage, CallbackInfo ci,
+        @Share("livingDamageFrame") LocalLongRef frameRef) {
+        frameRef.set(packFrame(damage, NO_FRAME));
+    }
 
     @ModifyExpressionValue(
         method = "actuallyHurt",
         at = @At(value = "INVOKE", target = "getDamageAfterMagicAbsorb(Lnet/minecraft/world/damagesource/DamageSource;F)F"),
         remap = false)
-    private float placebo$fireLivingDamagePre(float mitigatedDamage, @Local(argsOnly = true) DamageSource source, @Local(argsOnly = true) float originalDamage) {
+    private float placebo$fireLivingDamagePre(float mitigatedDamage, @Local(argsOnly = true) DamageSource source,
+        @Share("livingDamageFrame") LocalLongRef frameRef) {
         LivingEntity entity = (LivingEntity) (Object) this;
-        LivingDamagePreContext pre = new LivingDamagePreContext(entity, source, originalDamage, mitigatedDamage);
-        PlaceboEvents.fireLivingDamagePre(pre);
+        long frame = frameRef.get();
+        float originalDamage = originalDamage(frame);
+        boolean fallback = !PlaceboEvents.livingDamagePreDirectAllowed()
+            || !PlaceboEvents.livingDamagePostDirectAllowed();
+        if (fallback) {
+            float preHealth = Math.max(entity.getHealth(), 0.0F);
+            LivingDamagePreContext pre = new LivingDamagePreContext(entity, source, originalDamage, mitigatedDamage);
+            PlaceboEvents.fireLivingDamagePre(pre);
+            frameRef.set(packFrame(originalDamage, fallbackPreHealth(preHealth)));
+            return pre.getDamage();
+        }
 
-        float inflictedDamage = pre.getDamage();
-        float healthDamage = Math.max(inflictedDamage - entity.getAbsorptionAmount(), 0.0F);
-        PLACEBO$POST_DAMAGE.get().push(new LivingDamagePostContext(entity, source, originalDamage, inflictedDamage, healthDamage));
-        return inflictedDamage;
+        float preHealth = FabricDamageDispatcher.dispatchPre(entity, source, originalDamage, mitigatedDamage);
+        frameRef.set(packFrame(originalDamage, preHealth >= 0.0F ? Float.floatToRawIntBits(preHealth) : NO_PRE_HEALTH));
+        return mitigatedDamage;
     }
 
     @Inject(method = "actuallyHurt", at = @At("TAIL"), remap = false)
-    private void placebo$fireLivingDamagePost(ServerLevel level, DamageSource source, float damage, CallbackInfo ci) {
-        Deque<LivingDamagePostContext> contexts = PLACEBO$POST_DAMAGE.get();
-        if (contexts.isEmpty()) {
+    private void placebo$fireLivingDamagePost(ServerLevel level, DamageSource source, float damage, CallbackInfo ci,
+        @Local(name = "originalDamage") float inflictedDamage,
+        @Local(name = "dmg") float healthDamage,
+        @Share("livingDamageFrame") LocalLongRef frameRef) {
+        long frame = frameRef.get();
+        frameRef.set(packFrame(0.0F, NO_FRAME));
+        int marker = marker(frame);
+        if (marker == NO_FRAME || !(healthDamage > 0.0F)) {
             return;
         }
-        LivingDamagePostContext post = contexts.pop();
-        if (contexts.isEmpty()) {
-            PLACEBO$POST_DAMAGE.remove();
+
+        LivingEntity entity = (LivingEntity) (Object) this;
+        float originalDamage = originalDamage(frame);
+        boolean fallback = (marker & FALLBACK_FLAG) != 0;
+        float preHealth = fallback ? Float.intBitsToFloat(marker & ~FALLBACK_FLAG)
+            : (marker == NO_PRE_HEALTH ? -1.0F : Float.intBitsToFloat(marker));
+        if (fallback) {
+            PlaceboEvents.fireLivingDamagePost(new LivingDamagePostContext(entity, source, originalDamage,
+                inflictedDamage, healthDamage, preHealth));
+        } else {
+            FabricDamageDispatcher.dispatchPost(entity, source, originalDamage, inflictedDamage, healthDamage, preHealth);
         }
-        PlaceboEvents.fireLivingDamagePost(post);
+    }
+
+    private static long packFrame(float originalDamage, int marker) {
+        return ((long) Float.floatToRawIntBits(originalDamage) << 32) | (marker & 0xFFFF_FFFFL);
+    }
+
+    private static float originalDamage(long frame) {
+        return Float.intBitsToFloat((int) (frame >>> 32));
+    }
+
+    private static int marker(long frame) {
+        return (int) frame;
+    }
+
+    private static int fallbackPreHealth(float health) {
+        return Float.floatToRawIntBits(Math.max(health, 0.0F)) | FALLBACK_FLAG;
     }
 
 }

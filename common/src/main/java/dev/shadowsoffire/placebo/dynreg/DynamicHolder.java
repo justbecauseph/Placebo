@@ -1,6 +1,5 @@
 package dev.shadowsoffire.placebo.dynreg;
 
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -63,7 +62,21 @@ public class DynamicHolder<R> implements Supplier<R> {
     @Override
     public R get() {
         this.bind();
-        Objects.requireNonNull(this.value, "Trying to access unbound value: " + this.id);
+        R value = this.value;
+        if (value == null) {
+            throw new NullPointerException("Trying to access unbound value: " + this.id);
+        }
+        return value;
+    }
+
+    /**
+     * Gets the value, if available, resolving it once if possible.
+     *
+     * @return The target value, or {@code null} when this holder is unbound.
+     */
+    @Nullable
+    public R getOrNull() {
+        this.bind();
         return this.value;
     }
 
@@ -115,7 +128,7 @@ public class DynamicHolder<R> implements Supplier<R> {
 
     @Override
     public int hashCode() {
-        return Objects.hash(this.id, this.registry);
+        return 31 * (31 + this.id.hashCode()) + this.registry.hashCode();
     }
 
     @Override

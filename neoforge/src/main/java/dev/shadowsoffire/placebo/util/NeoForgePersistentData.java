@@ -1,5 +1,7 @@
 package dev.shadowsoffire.placebo.util;
 
+import org.jetbrains.annotations.Nullable;
+
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Entity;
 
@@ -11,6 +13,12 @@ public class NeoForgePersistentData implements PersistentData.Impl {
 
     @Override
     public CompoundTag of(Entity entity) {
+        return entity.getPersistentData();
+    }
+
+    @Override
+    @Nullable
+    public CompoundTag peek(Entity entity) {
         return entity.getPersistentData();
     }
 

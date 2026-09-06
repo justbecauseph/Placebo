@@ -9,11 +9,12 @@ import org.spongepowered.asm.mixin.Mixin;
 
 import dev.shadowsoffire.placebo.util.CachedObject;
 import dev.shadowsoffire.placebo.util.CachedObject.CachedObjectSource;
+import dev.shadowsoffire.placebo.util.CachedObject.CacheInspection;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
 @Mixin(ItemStack.class)
-public class ItemStackMixin implements CachedObjectSource {
+public class ItemStackMixin implements CachedObjectSource, CacheInspection {
 
     private volatile Map<Identifier, CachedObject<?>> cachedObjects = null;
 
@@ -22,6 +23,12 @@ public class ItemStackMixin implements CachedObjectSource {
     public <T> T getOrCreate(Identifier id, Function<ItemStack, T> deserializer, ToIntFunction<ItemStack> hasher) {
         var cachedObj = this.getOrCreate().computeIfAbsent(id, key -> new CachedObject<>(key, deserializer, hasher));
         return (T) cachedObj.get((ItemStack) (Object) this);
+    }
+
+    @Override
+    public int cachedObjectCount() {
+        Map<Identifier, CachedObject<?>> cache = this.cachedObjects;
+        return cache == null ? 0 : cache.size();
     }
 
     private Map<Identifier, CachedObject<?>> getOrCreate() {

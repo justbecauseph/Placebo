@@ -1,6 +1,7 @@
 package dev.shadowsoffire.placebo.util;
 
 import dev.shadowsoffire.placebo.events.PlaceboEvents;
+import dev.shadowsoffire.placebo.events.FabricDropDispatcher;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 
@@ -25,7 +26,17 @@ public class DespawnHooks {
         if (!(mob.level() instanceof ServerLevel level)) {
             return false;
         }
-        PlaceboEvents.DespawnResult result = PlaceboEvents.fireMobDespawn(mob, level);
+        PlaceboEvents.DespawnResult result;
+        if (PlaceboEvents.mobDespawnDirectAllowed()) {
+            // The empty direct generation is common for ordinary mobs when no add-on owns this hook.  Keep that
+            // case allocation-free too; the compatibility event is only needed after public registration.
+            result = PlaceboEvents.mobDespawnHasListeners()
+                ? FabricDropDispatcher.dispatchDespawn(mob, level, PlaceboEvents.DespawnResult.DEFAULT)
+                : PlaceboEvents.DespawnResult.DEFAULT;
+        }
+        else {
+            result = PlaceboEvents.fireMobDespawn(mob, level);
+        }
         switch (result) {
             case ALLOW -> mob.discard();
             case DENY -> mob.setNoActionTime(0);

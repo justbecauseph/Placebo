@@ -4,6 +4,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
+import dev.shadowsoffire.placebo.events.FabricHealDispatcher;
 import dev.shadowsoffire.placebo.events.PlaceboEvents;
 import net.minecraft.world.entity.LivingEntity;
 
@@ -19,14 +20,15 @@ import net.minecraft.world.entity.LivingEntity;
  * A cancelled heal is represented as an amount of {@code 0} rather than by cancelling the method. That is
  * faithful: vanilla {@code heal} has no amount guard, so it would run {@code setHealth(getHealth() + 0)},
  * which sets the health it already had. Doing it this way keeps the whole thing to one injection with no
- * cross-method state.
+ * cross-method state. The dispatcher selects the direct owned chain or one complete public fallback invocation
+ * before returning this value.
  */
 @Mixin(value = LivingEntity.class, remap = false)
 public class LivingEntityHealMixin {
 
     @ModifyVariable(method = "heal", at = @At("HEAD"), argsOnly = true, ordinal = 0, remap = false)
     private float placebo$fireHealEvent(float amount) {
-        return PlaceboEvents.fireLivingHeal((LivingEntity) (Object) this, amount);
+        return FabricHealDispatcher.apply((LivingEntity) (Object) this, amount);
     }
 
 }

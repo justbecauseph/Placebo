@@ -80,6 +80,14 @@ public final class DynRegPlatform {
      * payloads through {@code PayloadTypeRegistry}.
      */
     public interface SyncHandler {
+        /**
+         * Emits one complete registry sync. The default keeps the existing start/content/tags/end path used by
+         * NeoForge; Fabric overrides this to fan out an immutable encoded generation.
+         */
+        default void sync(@Nullable ServerPlayer player, DynamicRegistry<?> registry) {
+            registry.syncLegacy(player, this);
+        }
+
         void start(@Nullable ServerPlayer player, Identifier registryId);
 
         <R> void content(@Nullable ServerPlayer player, Identifier registryId, Identifier key, R value);

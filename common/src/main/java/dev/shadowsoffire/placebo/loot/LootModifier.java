@@ -70,6 +70,16 @@ public abstract class LootModifier {
     }
 
     /**
+     * Whether this modifier promises to mutate and return the supplied loot list.
+     * Fabric uses this promise only when every active modifier opts in; the default is conservative for
+     * third-party and replacement-capable modifiers. If an opt-in modifier returns another list anyway,
+     * the Fabric bridge reconciles that replacement safely, but the modifier has violated this contract.
+     */
+    public boolean inPlaceOnly() {
+        return false;
+    }
+
+    /**
      * The codec this modifier was registered with, used to dispatch on the {@code type} field.
      */
     public abstract MapCodec<? extends LootModifier> codec();

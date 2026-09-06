@@ -5,14 +5,10 @@ import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.event.ItemStackedOnOtherEvent;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
-import net.neoforged.neoforge.event.enchanting.GetEnchantmentLevelEvent;
 import net.neoforged.neoforge.event.enchanting.EnchantmentLevelSetEvent;
-import net.neoforged.neoforge.event.entity.EntityInvulnerabilityCheckEvent;
 import net.neoforged.neoforge.event.entity.EntityTeleportEvent;
 import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
-import net.neoforged.neoforge.event.entity.living.LivingEquipmentChangeEvent;
-import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.entity.living.LivingHealEvent;
 import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
@@ -20,7 +16,6 @@ import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.living.LivingShieldBlockEvent;
 import net.neoforged.neoforge.event.entity.living.MobDespawnEvent;
 import net.neoforged.neoforge.event.entity.living.MobSplitEvent;
-import net.neoforged.neoforge.event.tick.EntityTickEvent;
 
 /**
  * Bridges NeoForge's events onto {@link PlaceboEvents}.
@@ -53,11 +48,6 @@ public class NeoForgeEventBridge {
         }
     }
 
-    @SubscribeEvent
-    public void itemUseTick(LivingEntityUseItemEvent.Tick e) {
-        e.setDuration(PlaceboEvents.fireItemUseTick(e.getEntity(), e.getItem(), e.getDuration()));
-    }
-
     /**
      * NeoForge fires this once for the whole split; {@link PlaceboEvents#MOB_SPLIT} is per child. See that field
      * for why the common event is shaped that way.
@@ -67,21 +57,6 @@ public class NeoForgeEventBridge {
         for (Mob child : e.getChildren()) {
             PlaceboEvents.fireMobSplit(e.getParent(), child);
         }
-    }
-
-    /**
-     * NeoForge's event already hands over a mutable map and reads it back afterwards, so the bridge only has to
-     * pass it through.
-     * <p>
-     * Subscribed at {@link EventPriority#HIGH} because the whole common chain now occupies a single slot on
-     * NeoForge's bus, and the earliest consumer that used to subscribe directly (Apotheosis's affix and gem
-     * boosting) was at {@code HIGH}. Consumers keep their order relative to <i>each other</i> through
-     * Architectury's own {@link dev.architectury.event.EventPriority} when registering on
-     * {@link PlaceboEvents#ENCHANTMENT_LEVELS}.
-     */
-    @SubscribeEvent(priority = EventPriority.HIGH)
-    public void enchantmentLevels(GetEnchantmentLevelEvent e) {
-        PlaceboEvents.fireEnchantmentLevels(e.getStack(), e.getEnchantments());
     }
 
     /**
@@ -117,27 +92,9 @@ public class NeoForgeEventBridge {
         }
     }
 
-    @SubscribeEvent(priority = EventPriority.HIGH)
-    public void invulnerabilityCheck(EntityInvulnerabilityCheckEvent e) {
-        e.setInvulnerable(PlaceboEvents.fireInvulnerabilityCheck(e.getEntity(), e.getSource(), e.isInvulnerable()));
-    }
-
     @SubscribeEvent
     public void shieldBlock(LivingShieldBlockEvent e) {
         e.setBlockedDamage(PlaceboEvents.fireShieldBlock(e.getEntity(), e.getDamageSource(), e.getBlockedDamage()));
-    }
-
-    /**
-     * The common event's interrupt maps onto cancellation; NeoForge's separate "cancellation result" is left at
-     * its default of true, which is what cancelling meant for every handler that moved here.
-     */
-    /**
-     * At {@code HIGH} without {@code receiveCanceled}, matching every handler that moved here: none of them
-     * received cancelled events, so a third-party cancel keeps the whole common chain out exactly as before.
-     */
-    @SubscribeEvent
-    public void equipmentChange(LivingEquipmentChangeEvent e) {
-        PlaceboEvents.fireEquipmentChange(e.getEntity(), e.getSlot(), e.getTo());
     }
 
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -165,11 +122,6 @@ public class NeoForgeEventBridge {
         if (PlaceboEvents.fireProjectileImpact(e.getProjectile(), e.getRayTraceResult())) {
             e.setCanceled(true);
         }
-    }
-
-    @SubscribeEvent
-    public void entityTickPost(EntityTickEvent.Post e) {
-        PlaceboEvents.fireEntityTickPost(e.getEntity());
     }
 
     @SubscribeEvent

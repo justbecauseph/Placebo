@@ -2,10 +2,13 @@ package dev.shadowsoffire.placebo.registry;
 
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Objects;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -23,6 +26,9 @@ import dev.shadowsoffire.placebo.network.PayloadSender;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Registry;
+import net.minecraft.core.RegistryAccess;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import net.minecraft.network.ConnectionProtocol;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -83,7 +89,10 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
      */
     public static void registerReloadListener() {
         ServerLifecycleEvents.SERVER_STARTING.register(s -> server = s);
-        ServerLifecycleEvents.SERVER_STOPPED.register(s -> server = null);
+        ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+            server = null;
+            clearSyncCaches();
+        });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, s) -> syncTo(handler.player));
 
         ReloadListenerRegistry.register(PackType.SERVER_DATA, new SimplePreparableReloadListener<Void>() {
@@ -125,7 +134,7 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
         return (id.getNamespace().equals(Identifier.DEFAULT_NAMESPACE) ? "" : id.getNamespace() + "/") + id.getPath();
     }
 
-    private static class Loaded<K, V> implements DataMap<K, V> {
+    static class Loaded<K, V> implements DataMap<K, V> {
 
         private final Identifier id;
         private final DataMapSpec<K, V> spec;
@@ -154,7 +163,7 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
 
         void reload(ResourceManager manager) {
             var converter = FileToIdConverter.json("data_maps/" + folder(this.spec.registry()));
-            Map<Identifier, V> merged = new ConcurrentHashMap<>();
+            Map<Identifier, V> merged = new LinkedHashMap<>();
 
             // Every pack that declares this map, lowest priority first, so later packs win.
             for (var entry : converter.listMatchingResourceStacks(manager).entrySet()) {
@@ -170,7 +179,11 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
                 }
             }
 
-            this.values = Map.copyOf(merged);
+            synchronized (this.syncCacheLock) {
+                this.values = immutableMap(merged);
+                this.valuesGeneration++;
+                this.syncCache.clear();
+            }
             Placebo.LOGGER.debug("Loaded {} value(s) for data map {}.", this.values.size(), this.id);
         }
 
@@ -201,37 +214,157 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
             }
         }
 
+        private final Object syncCacheLock = new Object();
+        private final IdentityHashMap<RegistryAccess, EncodedSync> syncCache = new IdentityHashMap<>();
+        private volatile long valuesGeneration;
+
         void syncTo(ServerPlayer player) {
-            this.spec.networkCodec().ifPresent(codec -> {
-                try {
-                    RegistryOps<JsonElement> ops = player.registryAccess().createSerializationContext(JsonOps.INSTANCE);
-                    Map<Identifier, JsonElement> encoded = new java.util.HashMap<>();
-                    this.values.forEach((id, value) -> encoded.put(id, codec.encodeStart(ops, value).getOrThrow()));
-                    PayloadSender.toPlayer(player, new SyncPayload(this.id, this.spec.mandatorySync(), Map.copyOf(encoded)));
+            if (this.spec.networkCodec().isEmpty()) return;
+            try {
+                RegistryAccess access = player.registryAccess();
+                SyncPayload payload = this.encodedSync(access);
+                PayloadSender.toPlayer(player, payload);
+            }
+            catch (Exception ex) {
+                String message = "Failed to encode synced data map " + this.id + ": " + ex.getMessage();
+                Placebo.LOGGER.error(message, ex);
+                if (this.spec.mandatorySync()) {
+                    player.connection.disconnect(Component.literal(message));
                 }
-                catch (Exception ex) {
-                    String message = "Failed to encode synced data map " + this.id + ": " + ex.getMessage();
-                    Placebo.LOGGER.error(message, ex);
-                    if (this.spec.mandatorySync()) {
-                        player.connection.disconnect(Component.literal(message));
-                    }
-                }
-            });
+            }
         }
 
         void acceptSync(Map<Identifier, JsonElement> encoded, HolderLookup.Provider registries) {
             Codec<V> codec = this.spec.networkCodec().orElseThrow();
             RegistryOps<JsonElement> ops = registries.createSerializationContext(JsonOps.INSTANCE);
-            Map<Identifier, V> decoded = new java.util.HashMap<>();
+            Map<Identifier, V> decoded = new LinkedHashMap<>();
             encoded.forEach((id, json) -> decoded.put(id, codec.parse(ops, json).getOrThrow()));
-            this.values = Map.copyOf(decoded);
+            this.values = immutableMap(decoded);
         }
+
+        private SyncPayload encodedSync(RegistryAccess access) {
+            synchronized (this.syncCacheLock) {
+                long generation = this.valuesGeneration;
+                EncodedSync cached = this.syncCache.get(access);
+                if (cached != null && cached.generation() == generation) {
+                    return cached.payload();
+                }
+
+                Codec<V> codec = this.spec.networkCodec().orElseThrow();
+                RegistryOps<JsonElement> ops = access.createSerializationContext(JsonOps.INSTANCE);
+                ByteBuf source = Unpooled.buffer();
+                RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(source, access);
+                try {
+                    ByteBufCodecs.writeCount(buf, this.values.size(), MAX_SYNCED_VALUES);
+                    for (Map.Entry<Identifier, V> entry : this.values.entrySet()) {
+                        buf.writeIdentifier(entry.getKey());
+                        JsonElement json = codec.encodeStart(ops, entry.getValue()).getOrThrow();
+                        buf.writeUtf(json.toString(), MAX_SYNCED_VALUE_JSON);
+                    }
+                    byte[] body = new byte[buf.readableBytes()];
+                    buf.getBytes(buf.readerIndex(), body);
+                    SyncPayload payload = SyncPayload.raw(this.id, this.spec.mandatorySync(), body);
+                    this.syncCache.put(access, new EncodedSync(generation, payload));
+                    return payload;
+                }
+                finally {
+                    buf.release();
+                }
+            }
+        }
+
+        void clearSyncCache() {
+            synchronized (this.syncCacheLock) {
+                this.syncCache.clear();
+            }
+        }
+
+        /** Test seam for publishing an immutable values generation without constructing reload resources. */
+        void publishForTesting(Map<Identifier, V> values) {
+            synchronized (this.syncCacheLock) {
+                this.values = immutableMap(values);
+                this.valuesGeneration++;
+                this.syncCache.clear();
+            }
+        }
+
+        /** Test seam for exercising the same lazy access-keyed cache used by player sync. */
+        SyncPayload encodedSyncForTesting(RegistryAccess access) {
+            return this.encodedSync(access);
+        }
+
+        long valuesGeneration() {
+            return this.valuesGeneration;
+        }
+
+        private record EncodedSync(long generation, SyncPayload payload) {}
     }
 
-    public record SyncPayload(Identifier id, boolean mandatory, Map<Identifier, JsonElement> values) implements CustomPacketPayload {
+    private static <K, V> Map<K, V> immutableMap(Map<K, V> source) {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(source));
+    }
+
+    public static final class SyncPayload implements CustomPacketPayload {
+
+        private final Identifier id;
+        private final boolean mandatory;
+        private final Map<Identifier, JsonElement> values;
+        /** Immutable outbound body containing the count and value strings; null means legacy map form. */
+        private final byte[] rawBody;
 
         public static final Type<SyncPayload> TYPE = new Type<>(Placebo.loc("data_map_sync"));
         public static final StreamCodec<RegistryFriendlyByteBuf, SyncPayload> CODEC = StreamCodec.of(SyncPayload::write, SyncPayload::read);
+
+        public SyncPayload(Identifier id, boolean mandatory, Map<Identifier, JsonElement> values) {
+            this(id, mandatory, immutableMap(values), null);
+        }
+
+        private SyncPayload(Identifier id, boolean mandatory, byte[] rawBody) {
+            this(id, mandatory, Map.of(), rawBody);
+        }
+
+        private SyncPayload(Identifier id, boolean mandatory, Map<Identifier, JsonElement> values, byte[] rawBody) {
+            this.id = Objects.requireNonNull(id, "id");
+            this.mandatory = mandatory;
+            this.values = values;
+            this.rawBody = rawBody;
+        }
+
+        /** Creates an outbound payload backed by immutable raw body bytes. */
+        public static SyncPayload raw(Identifier id, boolean mandatory, byte[] rawBody) {
+            return new SyncPayload(id, mandatory, rawBody.clone());
+        }
+
+        public Identifier id() {
+            return this.id;
+        }
+
+        public boolean mandatory() {
+            return this.mandatory;
+        }
+
+        public Map<Identifier, JsonElement> values() {
+            return this.values;
+        }
+
+        /** Defensive copy for diagnostics/tests; the writer uses the private immutable array directly. */
+        public byte[] rawBody() {
+            return this.rawBody == null ? null : this.rawBody.clone();
+        }
+
+        /** Encodes the exact legacy body (everything after id and mandatory) into immutable bytes. */
+        static byte[] encodeBody(Map<Identifier, JsonElement> values) {
+            RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+            try {
+                writeBody(buf, values);
+                byte[] result = new byte[buf.readableBytes()];
+                buf.getBytes(buf.readerIndex(), result);
+                return result;
+            }
+            finally {
+                buf.release();
+            }
+        }
 
         @Override
         public Type<? extends CustomPacketPayload> type() {
@@ -241,8 +374,18 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
         private static void write(RegistryFriendlyByteBuf buf, SyncPayload payload) {
             buf.writeIdentifier(payload.id);
             buf.writeBoolean(payload.mandatory);
-            ByteBufCodecs.writeCount(buf, payload.values.size(), MAX_SYNCED_VALUES);
-            payload.values.forEach((id, json) -> {
+            if (payload.rawBody != null) {
+                // writeBytes(byte[]) copies and does not consume a source reader index.
+                buf.writeBytes(payload.rawBody);
+            }
+            else {
+                writeBody(buf, payload.values);
+            }
+        }
+
+        private static void writeBody(RegistryFriendlyByteBuf buf, Map<Identifier, JsonElement> values) {
+            ByteBufCodecs.writeCount(buf, values.size(), MAX_SYNCED_VALUES);
+            values.forEach((id, json) -> {
                 buf.writeIdentifier(id);
                 buf.writeUtf(json.toString(), MAX_SYNCED_VALUE_JSON);
             });
@@ -252,11 +395,11 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
             Identifier id = buf.readIdentifier();
             boolean mandatory = buf.readBoolean();
             int size = ByteBufCodecs.readCount(buf, MAX_SYNCED_VALUES);
-            Map<Identifier, JsonElement> values = new java.util.HashMap<>(size);
+            Map<Identifier, JsonElement> values = new LinkedHashMap<>(size);
             for (int i = 0; i < size; i++) {
                 values.put(buf.readIdentifier(), JsonParser.parseString(buf.readUtf(MAX_SYNCED_VALUE_JSON)));
             }
-            return new SyncPayload(id, mandatory, Map.copyOf(values));
+            return new SyncPayload(id, mandatory, immutableMap(values));
         }
 
         public static class Provider implements PayloadProvider<SyncPayload> {
@@ -281,7 +424,7 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
                     return;
                 }
                 try {
-                    map.acceptSync(msg.values, ctx.player().registryAccess());
+                    map.acceptSync(msg.values(), ctx.player().registryAccess());
                 }
                 catch (Exception ex) {
                     String error = "Failed to decode synced data map " + msg.id + ": " + ex.getMessage();
@@ -305,11 +448,36 @@ public class FabricDataMaps implements DeferredHelper.DataMapFactory {
                 return "1";
             }
         }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof SyncPayload other)) return false;
+            return this.id.equals(other.id) && this.mandatory == other.mandatory
+                && this.values.equals(other.values) && java.util.Arrays.equals(this.rawBody, other.rawBody);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Objects.hash(this.id, this.mandatory, this.values) + java.util.Arrays.hashCode(this.rawBody);
+        }
+
+        @Override
+        public String toString() {
+            return this.rawBody == null
+                ? "SyncPayload[id=" + this.id + ", mandatory=" + this.mandatory + ", values=" + this.values + "]"
+                : "SyncPayload[id=" + this.id + ", mandatory=" + this.mandatory + ", rawBodyLength=" + this.rawBody.length + "]";
+        }
     }
 
     /** Only for tests and diagnostics: the maps declared so far. */
     public static List<Identifier> declared() {
         return DECLARED.stream().map(m -> m.id).toList();
+    }
+
+    /** Drops registry-access-specific encoded bodies when the server goes away. */
+    public static void clearSyncCaches() {
+        DECLARED.forEach(Loaded::clearSyncCache);
     }
 
 

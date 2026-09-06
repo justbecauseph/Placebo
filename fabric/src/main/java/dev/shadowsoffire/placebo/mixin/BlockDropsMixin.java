@@ -1,25 +1,23 @@
 package dev.shadowsoffire.placebo.mixin;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
+import java.util.Collections;
 import java.util.List;
 
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 
+import dev.shadowsoffire.placebo.events.FabricDropDispatcher;
 import dev.shadowsoffire.placebo.events.PlaceboEvents;
+import dev.shadowsoffire.placebo.capture.BlockDropCaptureSupport;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -33,45 +31,27 @@ import net.minecraft.world.phys.Vec3;
  * Fires {@link PlaceboEvents#BLOCK_DROPS} on Fabric. NeoForge gets the same event from its own
  * {@code BlockDropsEvent} via {@code NeoForgeEventBridge}.
  * <p>
- * This is {@link LivingEntityDropsMixin}'s problem again with a second half. Vanilla adds each dropped
- * {@link ItemEntity} to the world inside {@code popResource} as it is produced, so the drops have to be
- * captured to exist as a list at all — NeoForge patches a static capture onto {@code Block} and this does the
- * same.
- * <p>
- * <b>The experience needs capturing too, and for a different reason.</b> NeoForge asks
- * {@code BlockState#getExpDrop} for the amount up front, but that method is one of NeoForge's own additions to
- * vanilla. On Fabric there is nothing to ask: each block decides its own amount inside {@code spawnAfterBreak}
- * and hands it to {@code popExperience}. Intercepting the award is the only way to see the number — and it is
- * arguably the better one, since it is whatever the block actually meant to drop rather than a re-derivation.
- * <p>
- * Intercepting at {@code ExperienceOrb.award} rather than at the head of {@code popExperience} is deliberate:
- * the {@code BLOCK_DROPS} game rule is checked in between, so hooking earlier would capture experience that
- * vanilla had already decided not to award.
- * <p>
- * The capture is a stack rather than a single slot, so a block that breaks another block from inside its own
- * {@code spawnAfterBreak} does not swallow the outer one's drops. NeoForge's assigns unconditionally; this
- * behaves identically in the ordinary case and correctly in the nested one.
- * <p>
- * <b>One ordering difference from NeoForge, recorded rather than hidden:</b> NeoForge fires the event, spawns
- * the drops, and only then calls {@code spawnAfterBreak}, having suppressed vanilla's experience drop. Here
- * vanilla's {@code spawnAfterBreak} has already run by the time the event fires, so any of its other side
- * effects — particles, sculk vibrations — happen before the drops reach the world instead of after. Nothing in
- * this stack observes that order.
+ * Vanilla adds item entities directly from {@code popResource} and awards experience from
+ * {@code popExperience}, so both calls are diverted while one of the three exact {@code dropResources}
+ * overloads is running. Every invocation pushes a frame, including an inactive sentinel. That sentinel is
+ * important when an active block drop calls an irrelevant nested drop: the nested vanilla work must not be
+ * swallowed by the outer capture.
  */
 @Mixin(value = Block.class, remap = false)
 public abstract class BlockDropsMixin {
 
     /**
-     * One frame per {@code dropResources} call in progress. A stack rather than a single slot because a block
-     * can break another block from inside its own {@code spawnAfterBreak}; NeoForge's capture assigns
-     * unconditionally and would let the inner call swallow the outer one's drops.
+     * A state is created only when a dropResources wrapper is entered. The capture hooks themselves use a
+     * nullable ThreadLocal and therefore do not allocate a state on ordinary block-item spawning.
      */
     @Unique
-    private static final Deque<PlaceboBlockDropCapture> placebo$captures = new ArrayDeque<>();
+    private static final ThreadLocal<BlockDropCaptureSupport.State> placebo$captures = new ThreadLocal<>();
 
     @Unique
-    private static @Nullable PlaceboBlockDropCapture placebo$capture() {
-        return placebo$captures.peek();
+    private static @Nullable BlockDropCaptureSupport.Capture placebo$capture() {
+        BlockDropCaptureSupport.State state = placebo$captures.get();
+        if (state == null || state.active.isEmpty()) return null;
+        return state.active.get(state.active.size() - 1);
     }
 
     @WrapOperation(
@@ -79,11 +59,14 @@ public abstract class BlockDropsMixin {
         at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;addFreshEntity(Lnet/minecraft/world/entity/Entity;)Z"),
         remap = false)
     private static boolean placebo$captureBlockDrop(Level level, Entity dropped, Operation<Boolean> original) {
-        PlaceboBlockDropCapture capture = placebo$capture();
-        if (capture != null) {
+        BlockDropCaptureSupport.Capture capture = placebo$capture();
+        if (capture != null && capture.plan.capturesItems()) {
+            if (capture.drops == null) capture.drops = capture.takeReusableDrops();
             capture.drops.add((ItemEntity) dropped);
             return true;
         }
+        // In XP_ONLY mode this is deliberately the original call: item identity and vanilla spawn timing are
+        // unchanged, while only the experience award is diverted.
         return original.call(level, dropped);
     }
 
@@ -92,8 +75,8 @@ public abstract class BlockDropsMixin {
         at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/ExperienceOrb;award(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/phys/Vec3;I)V"),
         remap = false)
     private void placebo$captureBlockExperience(ServerLevel level, Vec3 pos, int amount, Operation<Void> original) {
-        PlaceboBlockDropCapture capture = placebo$capture();
-        if (capture != null) {
+        BlockDropCaptureSupport.Capture capture = placebo$capture();
+        if (capture != null && capture.plan.capturesExperience()) {
             capture.experience += amount;
             return;
         }
@@ -102,79 +85,153 @@ public abstract class BlockDropsMixin {
 
     // --- dropResources(BlockState, Level, BlockPos) ---
 
-    @Inject(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)V", at = @At("HEAD"), remap = false)
-    private static void placebo$beginSimpleCapture(BlockState state, Level level, BlockPos pos, CallbackInfo ci) {
-        placebo$begin(level);
-    }
-
-    @Inject(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)V", at = @At("RETURN"), remap = false)
-    private static void placebo$fireSimpleDrops(BlockState state, Level level, BlockPos pos, CallbackInfo ci) {
-        placebo$fire(level, pos, state, null, ItemStack.EMPTY);
+    @WrapMethod(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)V")
+    private static void placebo$wrapSimple(BlockState state, Level level, BlockPos pos, Operation<Void> original)
+        throws Throwable {
+        BlockDropCaptureSupport.Capture capture = placebo$begin(state, level, pos, null, ItemStack.EMPTY);
+        if (capture == null) {
+            original.call(state, level, pos);
+            return;
+        }
+        try {
+            original.call(state, level, pos);
+        }
+        catch (Throwable failure) {
+            placebo$failure(level, pos, capture, failure);
+            throw failure;
+        }
+        placebo$success(level, pos, state, null, ItemStack.EMPTY, capture);
     }
 
     // --- dropResources(BlockState, LevelAccessor, BlockPos, BlockEntity) ---
 
-    @Inject(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/BlockEntity;)V", at = @At("HEAD"), remap = false)
-    private static void placebo$beginBlockEntityCapture(BlockState state, LevelAccessor level, BlockPos pos, BlockEntity blockEntity, CallbackInfo ci) {
-        placebo$begin(level);
-    }
-
-    @Inject(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/BlockEntity;)V", at = @At("RETURN"), remap = false)
-    private static void placebo$fireBlockEntityDrops(BlockState state, LevelAccessor level, BlockPos pos, BlockEntity blockEntity, CallbackInfo ci) {
-        placebo$fire(level, pos, state, null, ItemStack.EMPTY);
+    @WrapMethod(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/BlockEntity;)V")
+    private static void placebo$wrapBlockEntity(BlockState state, LevelAccessor level, BlockPos pos,
+        BlockEntity blockEntity, Operation<Void> original) throws Throwable {
+        BlockDropCaptureSupport.Capture capture = placebo$begin(state, level, pos, null, ItemStack.EMPTY);
+        if (capture == null) {
+            original.call(state, level, pos, blockEntity);
+            return;
+        }
+        try {
+            original.call(state, level, pos, blockEntity);
+        }
+        catch (Throwable failure) {
+            placebo$failure(level, pos, capture, failure);
+            throw failure;
+        }
+        placebo$success(level, pos, state, null, ItemStack.EMPTY, capture);
     }
 
     // --- dropResources(BlockState, Level, BlockPos, BlockEntity, Entity, ItemStack) ---
 
-    @Inject(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/BlockEntity;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/item/ItemStack;)V", at = @At("HEAD"), remap = false)
-    private static void placebo$beginToolCapture(BlockState state, Level level, BlockPos pos, BlockEntity blockEntity, Entity breaker, ItemStack tool, CallbackInfo ci) {
-        placebo$begin(level);
-    }
-
-    @Inject(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/BlockEntity;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/item/ItemStack;)V", at = @At("RETURN"), remap = false)
-    private static void placebo$fireToolDrops(BlockState state, Level level, BlockPos pos, BlockEntity blockEntity, Entity breaker, ItemStack tool, CallbackInfo ci) {
-        placebo$fire(level, pos, state, breaker, tool);
-    }
-
-    @Unique
-    private static void placebo$begin(LevelAccessor level) {
-        if (level instanceof ServerLevel) {
-            placebo$captures.push(new PlaceboBlockDropCapture());
-        }
-    }
-
-    /**
-     * Fires the event with whatever was captured, then puts it into the world. The capture is cleared first so
-     * that a listener spawning an entity of its own is not swallowed by the drain in progress.
-     */
-    @Unique
-    private static void placebo$fire(LevelAccessor level, BlockPos pos, BlockState state, @Nullable Entity breaker, ItemStack tool) {
-        if (!(level instanceof ServerLevel serverLevel) || placebo$captures.isEmpty()) {
+    @WrapMethod(method = "dropResources(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/entity/BlockEntity;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/item/ItemStack;)V")
+    private static void placebo$wrapTool(BlockState state, Level level, BlockPos pos, BlockEntity blockEntity,
+        Entity breaker, ItemStack tool, Operation<Void> original) throws Throwable {
+        BlockDropCaptureSupport.Capture capture = placebo$begin(state, level, pos, breaker, tool);
+        if (capture == null) {
+            original.call(state, level, pos, blockEntity, breaker, tool);
             return;
         }
-        PlaceboBlockDropCapture capture = placebo$captures.pop();
-        List<ItemEntity> drops = capture.drops;
-
-        int experience = PlaceboEvents.fireBlockDrops(serverLevel, pos, state, breaker, tool, drops, capture.experience);
-
-        for (ItemEntity drop : drops) {
-            serverLevel.addFreshEntity(drop);
+        try {
+            original.call(state, level, pos, blockEntity, breaker, tool);
         }
-        if (experience > 0) {
-            // The game rule was already checked where the amount was captured; re-checking would double-gate it.
-            ExperienceOrb.award(serverLevel, Vec3.atCenterOf(pos), experience);
+        catch (Throwable failure) {
+            placebo$failure(level, pos, capture, failure);
+            throw failure;
         }
+        placebo$success(level, pos, state, breaker, tool, capture);
     }
 
-    /**
-     * A single in-progress capture. Declared here rather than as a separate file because it is an
-     * implementation detail of this mixin, and mixin inner classes are shadowed into the target alongside it.
-     */
     @Unique
-    private static final class PlaceboBlockDropCapture {
-
-        private final List<ItemEntity> drops = new ArrayList<>();
-        private int experience;
+    private static @Nullable BlockDropCaptureSupport.Capture placebo$begin(BlockState state, LevelAccessor level, BlockPos pos,
+        @Nullable Entity breaker, ItemStack tool) {
+        return BlockDropCaptureSupport.begin(placebo$captures, state, level, pos, breaker, tool);
     }
 
+    /** Original method failed: remove this frame, drain partial intercepted output once, then let the failure win. */
+    @Unique
+    private static void placebo$failure(LevelAccessor level, BlockPos pos, BlockDropCaptureSupport.Capture capture,
+        Throwable originalFailure) throws Throwable {
+        BlockDropCaptureSupport.State captureState = placebo$captures.get();
+        BlockDropCaptureSupport.pop(captureState, capture);
+        Throwable drainFailure = null;
+        try {
+            placebo$withInactiveDrain(captureState, level, pos, capture);
+        }
+        catch (Throwable failure) {
+            drainFailure = failure;
+        }
+        finally {
+            captureState.release(capture);
+        }
+        if (drainFailure != null) originalFailure.addSuppressed(drainFailure);
+    }
+
+    /** Original method completed: pop before dispatch, mask any outer capture while dispatching and draining. */
+    @Unique
+    private static void placebo$success(LevelAccessor level, BlockPos pos, BlockState state,
+        @Nullable Entity breaker, ItemStack tool, BlockDropCaptureSupport.Capture capture) throws Throwable {
+        BlockDropCaptureSupport.State captureState = placebo$captures.get();
+        BlockDropCaptureSupport.pop(captureState, capture);
+        if (capture.plan.mode() == FabricDropDispatcher.Mode.NONE) {
+            captureState.release(capture);
+            return;
+        }
+
+        Throwable dispatchFailure = null;
+        try {
+            BlockDropCaptureSupport.pushInactive(captureState);
+            if (!(level instanceof ServerLevel server)) return;
+
+            // The list is still lazy: an XP_ONLY handler gets an immutable empty view, while an item-aware
+            // event receives the same mutable list that capture hooks use (allocated only at this boundary if
+            // vanilla produced no item entities).
+            List<ItemEntity> drops;
+            if (capture.plan.capturesItems()) {
+                if (capture.drops == null) capture.drops = capture.takeReusableDrops();
+                drops = capture.drops;
+            }
+            else {
+                drops = Collections.emptyList();
+            }
+
+            int experience = capture.experience;
+            if (capture.plan.isFallback()) {
+                experience = PlaceboEvents.fireBlockDrops(server, pos, state, breaker, tool, drops, experience);
+            }
+            else {
+                experience = FabricDropDispatcher.dispatchBlock(capture.plan, server, pos, state, breaker, tool,
+                    drops, experience);
+            }
+            capture.experience = experience;
+            BlockDropCaptureSupport.drain(captureState, server, pos, capture);
+        }
+        catch (Throwable failure) {
+            dispatchFailure = failure;
+            try {
+                BlockDropCaptureSupport.drain(captureState, level, pos, capture);
+            }
+            catch (Throwable drainFailure) {
+                dispatchFailure.addSuppressed(drainFailure);
+            }
+        }
+        finally {
+            BlockDropCaptureSupport.popInactive(captureState);
+            captureState.release(capture);
+        }
+        if (dispatchFailure != null) throw dispatchFailure;
+    }
+
+    @Unique
+    private static void placebo$withInactiveDrain(BlockDropCaptureSupport.State captureState, LevelAccessor level,
+        BlockPos pos, BlockDropCaptureSupport.Capture capture) throws Throwable {
+        BlockDropCaptureSupport.pushInactive(captureState);
+        try {
+            BlockDropCaptureSupport.drain(captureState, level, pos, capture);
+        }
+        finally {
+            BlockDropCaptureSupport.popInactive(captureState);
+        }
+    }
 }

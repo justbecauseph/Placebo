@@ -1,6 +1,7 @@
 package dev.shadowsoffire.placebo.util;
 
 import dev.shadowsoffire.placebo.Placebo;
+import org.jetbrains.annotations.Nullable;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentRegistry;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentTarget;
 import net.fabricmc.fabric.api.attachment.v1.AttachmentType;
@@ -26,6 +27,16 @@ public class FabricPersistentData implements PersistentData.Impl {
     @Override
     public CompoundTag of(Entity entity) {
         return ((AttachmentTarget) entity).getAttachedOrCreate(DATA, CompoundTag::new);
+    }
+
+    /**
+     * Fabric's attachment lookup is non-creating: an entity with no Placebo data keeps no empty attachment after
+     * this call. This is the guarantee used by optional marker checks such as GatewayEntity.getOwner().
+     */
+    @Override
+    @Nullable
+    public CompoundTag peek(Entity entity) {
+        return ((AttachmentTarget) entity).getAttached(DATA);
     }
 
 }

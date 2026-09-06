@@ -16,6 +16,7 @@ import dev.shadowsoffire.placebo.crafting.IngredientType;
 import dev.shadowsoffire.placebo.dynreg.DynRegPayloads;
 import dev.shadowsoffire.placebo.dynreg.FabricDynReg;
 import dev.shadowsoffire.placebo.dynreg.TagSyncPayload;
+import dev.shadowsoffire.placebo.events.FabricDamageDispatcher;
 import dev.shadowsoffire.placebo.loot.FabricLootModifiers;
 import dev.shadowsoffire.placebo.network.FabricPayloadRegistrar;
 import dev.shadowsoffire.placebo.network.FabricPayloadSender;
@@ -121,6 +122,9 @@ public class PlaceboFabric implements ModInitializer {
 
         // Outbound dispatch is called for the rest of the session.
         PayloadSender.setImpl(new FabricPayloadSender());
+        // Keep public POST fallback ordering in one Placebo-owned adapter; the normal path calls the same
+        // volatile slots directly from the actuallyHurt mixin.
+        FabricDamageDispatcher.installLivingDamagePostFallback();
         FakePlayerHelper.setImpl(new FabricFakePlayerHelper());
         MobSpawnHelper.setImpl(new FabricMobSpawnHelper());
         // The half of the spawn-cancelled flag that acts on it. NeoForge does the same thing from its own

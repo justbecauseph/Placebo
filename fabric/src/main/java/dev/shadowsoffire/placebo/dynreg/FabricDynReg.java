@@ -1,5 +1,7 @@
 package dev.shadowsoffire.placebo.dynreg;
 
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -17,10 +19,14 @@ import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.PackType;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 /**
  * Fabric implementations of the {@link DynRegPlatform} hooks. Installed from {@code PlaceboFabric}.
@@ -69,7 +75,10 @@ public final class FabricDynReg {
         // The registry lookup has to come from the running server: unlike NeoForge, Fabric injects nothing
         // into the listener, so there is no context to read off it.
         ServerLifecycleEvents.SERVER_STARTING.register(s -> server = s);
-        ServerLifecycleEvents.SERVER_STOPPED.register(s -> server = null);
+        ServerLifecycleEvents.SERVER_STOPPED.register(s -> {
+            server = null;
+            clearSyncCaches();
+        });
         ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> SyncManagement.syncAll(player));
     }
 
@@ -116,6 +125,25 @@ public final class FabricDynReg {
         }
 
         @Override
+        public void sync(@Nullable ServerPlayer player, DynamicRegistry<?> registry) {
+            if (player != null) {
+                send(player, encodedGeneration(registry, player.registryAccess()));
+            }
+            else if (server != null) {
+                PlayerLookup.all(server).forEach(p -> send(p, encodedGeneration(registry, p.registryAccess())));
+            }
+        }
+
+        private static void send(ServerPlayer player, SyncGeneration generation) {
+            ServerPlayNetworking.send(player, generation.start());
+            generation.content().forEach(payload -> ServerPlayNetworking.send(player, payload));
+            if (generation.tags() != null) {
+                ServerPlayNetworking.send(player, generation.tags());
+            }
+            ServerPlayNetworking.send(player, generation.end());
+        }
+
+        @Override
         public void start(@Nullable ServerPlayer player, Identifier registryId) {
             target(player).accept(new DynRegPayloads.Start(registryId));
         }
@@ -135,6 +163,79 @@ public final class FabricDynReg {
             target(player).accept(new DynRegPayloads.End(registryId));
         }
 
+    }
+
+    private static final Object SYNC_CACHE_LOCK = new Object();
+    private static final IdentityHashMap<DynamicRegistry<?>, IdentityHashMap<RegistryAccess, SyncGeneration>> SYNC_CACHE = new IdentityHashMap<>();
+
+    private static SyncGeneration encodedGeneration(DynamicRegistry<?> registry, RegistryAccess access) {
+        synchronized (SYNC_CACHE_LOCK) {
+            long revision = registry.syncRevision();
+            IdentityHashMap<RegistryAccess, SyncGeneration> byAccess = SYNC_CACHE.computeIfAbsent(registry, ignored -> new IdentityHashMap<>());
+            SyncGeneration cached = byAccess.get(access);
+            if (cached != null && cached.revision() == revision) {
+                return cached;
+            }
+
+            // Reload apply and tag binding are server-thread operations. The revision is a generation key, not an
+            // atomic snapshot mechanism, so callers must request a generation on that same thread.
+            SyncGeneration generated = buildGeneration(registry, access, revision);
+            if (registry.syncRevision() != revision) {
+                byAccess.remove(access);
+                return encodedGeneration(registry, access);
+            }
+            byAccess.put(access, generated);
+            return generated;
+        }
+    }
+
+    private static SyncGeneration buildGeneration(DynamicRegistry<?> registry, RegistryAccess access, long revision) {
+        List<DynRegPayloads.Content<?>> content = new ArrayList<>(registry.registry.size());
+        for (Map.Entry<Identifier, ?> entry : registry.registry.entrySet()) {
+            content.add(DynRegPayloads.Content.raw(registry.getId(), entry.getKey(), encodeItem(registry, entry.getValue(), access)));
+        }
+
+        Map<Identifier, List<Identifier>> tags = registry.exportTags();
+        TagSyncPayload tagPayload = tags.isEmpty()
+            ? null
+            : TagSyncPayload.raw(registry.getId(), TagSyncPayload.encodeBody(tags, access));
+        return new SyncGeneration(
+            revision,
+            new DynRegPayloads.Start(registry.getId()),
+            List.copyOf(content),
+            tagPayload,
+            new DynRegPayloads.End(registry.getId()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static byte[] encodeItem(DynamicRegistry<?> registry, Object value, RegistryAccess access) {
+        StreamCodec<RegistryFriendlyByteBuf, Object> codec =
+            (StreamCodec<RegistryFriendlyByteBuf, Object>) registry.serializer.streamCodec();
+        ByteBuf source = Unpooled.buffer();
+        RegistryFriendlyByteBuf buf = new RegistryFriendlyByteBuf(source, access);
+        try {
+            codec.encode(buf, value);
+            byte[] result = new byte[buf.readableBytes()];
+            buf.getBytes(buf.readerIndex(), result);
+            return result;
+        }
+        finally {
+            buf.release();
+        }
+    }
+
+    static void clearSyncCaches() {
+        synchronized (SYNC_CACHE_LOCK) {
+            SYNC_CACHE.clear();
+        }
+    }
+
+    /** Immutable one-reload wire generation used by the Fabric sender and focused tests. */
+    static record SyncGeneration(long revision, DynRegPayloads.Start start, List<DynRegPayloads.Content<?>> content,
+        @Nullable TagSyncPayload tags, DynRegPayloads.End end) {}
+
+    static SyncGeneration generationForTesting(DynamicRegistry<?> registry, RegistryAccess access) {
+        return encodedGeneration(registry, access);
     }
 
 }

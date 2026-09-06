@@ -1,20 +1,21 @@
 package dev.shadowsoffire.placebo.events;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 import org.jetbrains.annotations.Nullable;
 
 import dev.architectury.event.Event;
 import dev.architectury.event.EventFactory;
+import dev.architectury.event.EventPriority;
 import dev.architectury.event.EventResult;
 import dev.shadowsoffire.placebo.util.MobSpawnHelper;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -23,10 +24,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.inventory.ClickAction;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.item.ItemInstance;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.state.BlockState;
@@ -63,7 +61,8 @@ public class PlaceboEvents {
      * Listeners may change the amount via {@link Heal#setAmount}, and returning
      * {@link EventResult#interruptFalse()} cancels the heal entirely.
      */
-    public static final Event<Heal> LIVING_HEAL = EventFactory.createEventResult();
+    private static final TrackedEvent<Heal> TRACKED_LIVING_HEAL = new TrackedEvent<>(EventFactory.createEventResult());
+    public static final Event<Heal> LIVING_HEAL = TRACKED_LIVING_HEAL;
 
     @FunctionalInterface
     public interface Heal {
@@ -106,6 +105,24 @@ public class PlaceboEvents {
         HealContext ctx = new HealContext(entity, amount);
         EventResult result = LIVING_HEAL.invoker().heal(ctx);
         return result.isFalse() ? 0F : ctx.getAmount();
+    }
+
+    /** Registers a loader-owned Fabric healing compatibility listener without forcing fallback mode. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void registerLivingHealInternal(EventPriority priority, Heal listener) {
+        TRACKED_LIVING_HEAL.registerInternal(priority, listener);
+    }
+
+    /** Removes a loader-owned healing listener; direct dispatch remains disabled thereafter. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void unregisterLivingHealInternal(Heal listener) {
+        TRACKED_LIVING_HEAL.unregisterInternal(listener);
+    }
+
+    /** Returns whether Fabric may dispatch the fixed owned healing slots. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean livingHealDirectAllowed() {
+        return TRACKED_LIVING_HEAL.directAllowed();
     }
 
     /**
@@ -182,70 +199,6 @@ public class PlaceboEvents {
     }
 
     /**
-     * Fired every tick that a {@link LivingEntity} is actively using an item, before the remaining duration is
-     * decremented.
-     * <p>
-     * NeoForge counterpart: {@code LivingEntityUseItemEvent.Tick}. Vanilla site: {@code LivingEntity#updateUsingItem}.
-     * <p>
-     * <b>Not cancellable.</b> NeoForge's event is, but cancelling it means "stop using the item", which the two
-     * loaders reach by different routes. No handler in this stack cancels, so the event is sized to what they do
-     * use: read and adjust the duration. Growing it later is a smaller change than getting the semantics subtly
-     * different on one loader now.
-     */
-    public static final Event<ItemUseTick> ITEM_USE_TICK = EventFactory.createLoop();
-
-    @FunctionalInterface
-    public interface ItemUseTick {
-        void tick(ItemUseTickContext ctx);
-    }
-
-    /**
-     * Mutable state for {@link #ITEM_USE_TICK}.
-     */
-    public static final class ItemUseTickContext {
-
-        private final LivingEntity entity;
-        private final ItemStack item;
-        private int duration;
-
-        public ItemUseTickContext(LivingEntity entity, ItemStack item, int duration) {
-            this.entity = entity;
-            this.item = item;
-            this.duration = duration;
-        }
-
-        public LivingEntity getEntity() {
-            return this.entity;
-        }
-
-        public ItemStack getItem() {
-            return this.item;
-        }
-
-        /**
-         * Ticks remaining before the item finishes being used.
-         */
-        public int getDuration() {
-            return this.duration;
-        }
-
-        public void setDuration(int duration) {
-            this.duration = duration;
-        }
-    }
-
-    /**
-     * Fires {@link #ITEM_USE_TICK}. Called by the platform bridge, not by mods.
-     *
-     * @return the remaining use duration after any listener adjusted it.
-     */
-    public static int fireItemUseTick(LivingEntity entity, ItemStack item, int duration) {
-        ItemUseTickContext ctx = new ItemUseTickContext(entity, item, duration);
-        ITEM_USE_TICK.invoker().tick(ctx);
-        return ctx.getDuration();
-    }
-
-    /**
      * Fired once per child when a slime or magma cube splits on death.
      * <p>
      * NeoForge counterpart: {@code MobSplitEvent}. Vanilla site: {@code AbstractCubeMob#remove}.
@@ -268,66 +221,6 @@ public class PlaceboEvents {
      */
     public static void fireMobSplit(Mob parent, Mob child) {
         MOB_SPLIT.invoker().split(parent, child);
-    }
-
-    /**
-     * Fired whenever an item's enchantment levels are requested <i>for gameplay purposes</i>, so that listeners
-     * can report levels the item does not literally carry in its enchantment component.
-     * <p>
-     * NeoForge counterpart: {@code GetEnchantmentLevelEvent}. Vanilla sites: {@code EnchantmentHelper}'s
-     * {@code getItemEnchantmentLevel}, both {@code runIterationOnItem} overloads, and {@code hasTag} — the four
-     * places NeoForge patches to route through its gameplay-enchantment path.
-     * <p>
-     * <b>Not fired for NBT reads.</b> Anything that reads the {@code ENCHANTMENTS} component directly — the
-     * anvil, the tooltip, {@code getEnchantmentsForCrafting} — sees the unmodified item on both loaders.
-     * <p>
-     * <b>Not cancellable, and the whole map is always passed.</b> NeoForge's event carries a nullable
-     * <i>target</i> enchantment, so a listener querying one enchantment can skip populating the rest. No listener
-     * in this stack reads it — they all rebuild the whole map regardless — so it is not on the context, and both
-     * loaders therefore do the same work per query. NeoForge's own event allocates a mutable map per call too, so
-     * this costs Fabric no more than NeoForge already pays.
-     */
-    public static final Event<EnchantmentLevels> ENCHANTMENT_LEVELS = EventFactory.createLoop();
-
-    @FunctionalInterface
-    public interface EnchantmentLevels {
-        void modify(EnchantmentLevelContext ctx);
-    }
-
-    /**
-     * Mutable state for {@link #ENCHANTMENT_LEVELS}. The enchantment map <i>is</i> the mutable state — listeners
-     * change levels by calling {@link ItemEnchantments.Mutable#set} / {@link ItemEnchantments.Mutable#upgrade}
-     * on it, exactly as they did on NeoForge.
-     */
-    public static final class EnchantmentLevelContext {
-
-        private final ItemInstance stack;
-        private final ItemEnchantments.Mutable enchantments;
-
-        public EnchantmentLevelContext(ItemInstance stack, ItemEnchantments.Mutable enchantments) {
-            this.stack = stack;
-            this.enchantments = enchantments;
-        }
-
-        /**
-         * The item being queried. This is {@link ItemInstance} rather than {@link ItemStack} because the vanilla
-         * query methods take the wider type; listeners that need a real stack should pattern-match for one.
-         */
-        public ItemInstance getStack() {
-            return this.stack;
-        }
-
-        public ItemEnchantments.Mutable getEnchantments() {
-            return this.enchantments;
-        }
-    }
-
-    /**
-     * Fires {@link #ENCHANTMENT_LEVELS} against a map the caller already holds. Called by the platform bridge,
-     * not by mods.
-     */
-    public static void fireEnchantmentLevels(ItemInstance stack, ItemEnchantments.Mutable enchantments) {
-        ENCHANTMENT_LEVELS.invoker().modify(new EnchantmentLevelContext(stack, enchantments));
     }
 
     /**
@@ -410,30 +303,6 @@ public class PlaceboEvents {
     }
 
     /**
-     * Fires {@link #ENCHANTMENT_LEVELS} for a single enchantment. Called by the platform bridge, not by mods.
-     *
-     * @return the level of {@code ench} after listeners have run.
-     */
-    public static int fireSingleEnchantmentLevel(ItemInstance stack, Holder<Enchantment> ench, int level) {
-        ItemEnchantments.Mutable enchantments = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
-        enchantments.set(ench, level);
-        fireEnchantmentLevels(stack, enchantments);
-        return enchantments.getLevel(ench);
-    }
-
-    /**
-     * Fires {@link #ENCHANTMENT_LEVELS} for an item's whole enchantment map. Called by the platform bridge, not
-     * by mods.
-     *
-     * @return the map after listeners have run.
-     */
-    public static ItemEnchantments fireAllEnchantmentLevels(ItemInstance stack, ItemEnchantments enchantments) {
-        ItemEnchantments.Mutable mutable = new ItemEnchantments.Mutable(enchantments);
-        fireEnchantmentLevels(stack, mutable);
-        return mutable.toImmutable();
-    }
-
-    /**
      * Fired when a {@link LivingEntity} dies, once its death loot has been collected but before any of it reaches
      * the world, so that listeners can add, remove or move the drops.
      * <p>
@@ -447,7 +316,8 @@ public class PlaceboEvents {
      * — the drops are Placebo's own list until it spawns them. What a listener does need to know is whether
      * anyone <i>else</i> cancelled, which is what {@link LivingDropsContext#willSpawn()} answers.
      */
-    public static final Event<LivingDrops> LIVING_DROPS = EventFactory.createLoop();
+    private static final TrackedEvent<LivingDrops> TRACKED_LIVING_DROPS = new TrackedEvent<>(EventFactory.createLoop());
+    public static final Event<LivingDrops> LIVING_DROPS = TRACKED_LIVING_DROPS;
 
     @FunctionalInterface
     public interface LivingDrops {
@@ -525,7 +395,8 @@ public class PlaceboEvents {
      * Architectury's interrupting {@code EventResult} would have given first-writer-wins and quietly inverted
      * that.
      */
-    public static final Event<MobDespawn> MOB_DESPAWN = EventFactory.createLoop();
+    private static final TrackedEvent<MobDespawn> TRACKED_MOB_DESPAWN = new TrackedEvent<>(EventFactory.createLoop());
+    public static final Event<MobDespawn> MOB_DESPAWN = TRACKED_MOB_DESPAWN;
 
     @FunctionalInterface
     public interface MobDespawn {
@@ -589,67 +460,25 @@ public class PlaceboEvents {
         return ctx.getResult();
     }
 
-    /**
-     * Fired whenever an entity is asked whether it is immune to a damage source, after vanilla has decided and
-     * before the answer is used.
-     * <p>
-     * NeoForge counterpart: {@code EntityInvulnerabilityCheckEvent}. Vanilla site:
-     * {@code Entity#isInvulnerableToBase}, whose return NeoForge wraps.
-     * <p>
-     * This fires on a very hot path — every damage check on every entity — so listeners should return quickly.
-     * That is equally true on NeoForge, which posts its event from the same place.
-     */
-    public static final Event<InvulnerabilityCheck> ENTITY_INVULNERABILITY_CHECK = EventFactory.createLoop();
-
-    @FunctionalInterface
-    public interface InvulnerabilityCheck {
-        void check(InvulnerabilityContext ctx);
+    /** Internal Fabric bridge registration for a loader-owned despawn adapter. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void registerMobDespawnInternal(EventPriority priority, MobDespawn listener) {
+        TRACKED_MOB_DESPAWN.registerInternal(priority, listener);
     }
 
-    /**
-     * Mutable state for {@link #ENTITY_INVULNERABILITY_CHECK}.
-     */
-    public static final class InvulnerabilityContext {
-
-        private final Entity entity;
-        private final DamageSource source;
-        private boolean invulnerable;
-
-        public InvulnerabilityContext(Entity entity, DamageSource source, boolean invulnerable) {
-            this.entity = entity;
-            this.source = source;
-            this.invulnerable = invulnerable;
-        }
-
-        public Entity getEntity() {
-            return this.entity;
-        }
-
-        public DamageSource getSource() {
-            return this.source;
-        }
-
-        /**
-         * What the answer currently is — vanilla's verdict, plus anything an earlier listener changed.
-         */
-        public boolean isInvulnerable() {
-            return this.invulnerable;
-        }
-
-        public void setInvulnerable(boolean invulnerable) {
-            this.invulnerable = invulnerable;
-        }
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void unregisterMobDespawnInternal(MobDespawn listener) {
+        TRACKED_MOB_DESPAWN.unregisterInternal(listener);
     }
 
-    /**
-     * Fires {@link #ENTITY_INVULNERABILITY_CHECK}. Called by the platform bridge, not by mods.
-     *
-     * @return whether the entity is invulnerable to the source, after listeners have run.
-     */
-    public static boolean fireInvulnerabilityCheck(Entity entity, DamageSource source, boolean invulnerable) {
-        InvulnerabilityContext ctx = new InvulnerabilityContext(entity, source, invulnerable);
-        ENTITY_INVULNERABILITY_CHECK.invoker().check(ctx);
-        return ctx.isInvulnerable();
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean mobDespawnDirectAllowed() {
+        return TRACKED_MOB_DESPAWN.directAllowed();
+    }
+
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean mobDespawnHasListeners() {
+        return TRACKED_MOB_DESPAWN.hasListeners();
     }
 
     /**
@@ -836,7 +665,8 @@ public class PlaceboEvents {
      * receive cancelled events, so a third-party cancel keeps these listeners out, exactly as it did when they
      * were on NeoForge's bus directly.
      */
-    public static final Event<BlockDrops> BLOCK_DROPS = EventFactory.createLoop();
+    private static final TrackedEvent<BlockDrops> TRACKED_BLOCK_DROPS = new TrackedEvent<>(EventFactory.createLoop());
+    public static final Event<BlockDrops> BLOCK_DROPS = TRACKED_BLOCK_DROPS;
 
     @FunctionalInterface
     public interface BlockDrops {
@@ -923,6 +753,73 @@ public class PlaceboEvents {
         BlockDropsContext ctx = new BlockDropsContext(level, pos, state, breaker, tool, drops, experience);
         BLOCK_DROPS.invoker().drops(ctx);
         return ctx.getDroppedExperience();
+    }
+
+    /** Internal Fabric bridge registration for a loader-owned living-drop adapter. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void registerLivingDropsInternal(EventPriority priority, LivingDrops listener) {
+        TRACKED_LIVING_DROPS.registerInternal(priority, listener);
+    }
+
+    /** Internal removal permanently disables the direct chain for this event instance. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void unregisterLivingDropsInternal(LivingDrops listener) {
+        TRACKED_LIVING_DROPS.unregisterInternal(listener);
+    }
+
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean livingDropsDirectAllowed() {
+        return TRACKED_LIVING_DROPS.directAllowed();
+    }
+
+    /** Total listener count, including loader-owned adapters. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean livingDropsHasListeners() {
+        return TRACKED_LIVING_DROPS.hasListeners();
+    }
+
+    /** Returns whether a public (non-loader-owned) listener requires the Fabric compatibility path. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean livingDropsHasFallbackListeners() {
+        return TRACKED_LIVING_DROPS.hasExternalListeners();
+    }
+
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static int livingDropsListenerCount() {
+        return TRACKED_LIVING_DROPS.listenerCount();
+    }
+
+    /** Internal Fabric bridge registration for a loader-owned block-drop adapter. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void registerBlockDropsInternal(EventPriority priority, BlockDrops listener) {
+        TRACKED_BLOCK_DROPS.registerInternal(priority, listener);
+    }
+
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void unregisterBlockDropsInternal(BlockDrops listener) {
+        TRACKED_BLOCK_DROPS.unregisterInternal(listener);
+    }
+
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean blockDropsDirectAllowed() {
+        return TRACKED_BLOCK_DROPS.directAllowed();
+    }
+
+    /** Total listener count, including loader-owned adapters. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean blockDropsHasListeners() {
+        return TRACKED_BLOCK_DROPS.hasListeners();
+    }
+
+    /** Returns whether a public (non-loader-owned) listener requires the Fabric compatibility path. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean blockDropsHasFallbackListeners() {
+        return TRACKED_BLOCK_DROPS.hasExternalListeners();
+    }
+
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static int blockDropsListenerCount() {
+        return TRACKED_BLOCK_DROPS.listenerCount();
     }
 
     /**
@@ -1040,38 +937,6 @@ public class PlaceboEvents {
     }
 
     /**
-     * Fired when the item in one of a {@link LivingEntity}'s equipment slots has changed.
-     * <p>
-     * NeoForge counterpart: {@code LivingEquipmentChangeEvent}. Vanilla site:
-     * {@code LivingEntity#collectEquipmentChanges}.
-     * <p>
-     * <b>Fabric has no equivalent</b>, despite {@code ServerLivingEntityEvents} looking like the place for one —
-     * checked against the 26.2 checkout, which has allow/after damage, allow/after death and mob conversion,
-     * and nothing about equipment.
-     * <p>
-     * <b>Fires per changed slot, after the whole sweep rather than during it.</b> NeoForge posts from inside the
-     * loop, so its listeners can see an entity halfway through updating. Hooking the returned map instead needs
-     * no access to the loop's locals — which matters at 26.2, where the jar carries no local variable table —
-     * and nothing that could observe the difference does.
-     * <p>
-     * The previous stack is not on the context. NeoForge's event carries it; the one handler in this stack reads
-     * the slot and the new stack only.
-     */
-    public static final Event<EquipmentChange> LIVING_EQUIPMENT_CHANGE = EventFactory.createLoop();
-
-    @FunctionalInterface
-    public interface EquipmentChange {
-        void changed(LivingEntity entity, EquipmentSlot slot, ItemStack to);
-    }
-
-    /**
-     * Fires {@link #LIVING_EQUIPMENT_CHANGE} once per changed slot. Called by the platform bridge, not by mods.
-     */
-    public static void fireEquipmentChange(LivingEntity entity, EquipmentSlot slot, ItemStack to) {
-        LIVING_EQUIPMENT_CHANGE.invoker().changed(entity, slot, to);
-    }
-
-    /**
      * Fired immediately before a projectile applies a non-miss hit result.
      * <p>
      * NeoForge counterpart: {@code ProjectileImpactEvent}. Vanilla implements its seven projectile families
@@ -1099,31 +964,21 @@ public class PlaceboEvents {
     }
 
     /**
-     * Fired after an entity completes its regular tick, including while it is riding another entity.
-     * <p>
-     * This mirrors NeoForge's {@code EntityTickEvent.Post}. It intentionally has no cancellation: the
-     * vanilla tick has already completed by the time listeners run.
-     */
-    public static final Event<EntityTickPost> ENTITY_TICK_POST = EventFactory.createLoop();
-
-    @FunctionalInterface
-    public interface EntityTickPost {
-        void tick(Entity entity);
-    }
-
-    /**
-     * Fires {@link #ENTITY_TICK_POST}. Called by the platform bridge, not by mods.
-     */
-    public static void fireEntityTickPost(Entity entity) {
-        ENTITY_TICK_POST.invoker().tick(entity);
-    }
-
-    /**
      * Fired after vanilla's early rejection checks, before blocking, armor/magic reductions, absorption, and
      * health mutation. This mirrors NeoForge's mutable {@code LivingIncomingDamageEvent}; Fabric's analogous
      * callback is boolean-only and cannot carry a modified damage amount.
      */
-    public static final Event<IncomingDamage> LIVING_INCOMING_DAMAGE = EventFactory.createEventResult();
+    /*
+     * Fabric's incoming-damage bridge has a fixed, allocation-free path for the handlers owned by this
+     * stack. Keep the public Event API (and its Architectury priority ordering) intact, but distinguish the
+     * internal compatibility listeners from listeners registered by other mods. The Fabric bridge can then
+     * use the direct path only while this event still has the complete owned listener set and no external
+     * listeners. NeoForge simply continues to use the public event through its native bridge.
+     */
+    private static final TrackedEvent<IncomingDamage> TRACKED_INCOMING_DAMAGE = new TrackedEvent<>(
+        EventFactory.createEventResult(IncomingDamage.class));
+
+    public static final Event<IncomingDamage> LIVING_INCOMING_DAMAGE = TRACKED_INCOMING_DAMAGE;
 
     @FunctionalInterface
     public interface IncomingDamage {
@@ -1176,10 +1031,45 @@ public class PlaceboEvents {
     }
 
     /**
+     * Registers one of the loader-owned incoming-damage compatibility listeners without classifying it as
+     * an external listener. Fabric entrypoints use this for the public-event fallback that mirrors the direct
+     * slots. This method is intentionally narrow; all other callers should use
+     * {@link #LIVING_INCOMING_DAMAGE} so the normal Architectury contract remains unchanged.
+     */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void registerIncomingDamageInternal(EventPriority priority, IncomingDamage listener) {
+        TRACKED_INCOMING_DAMAGE.registerInternal(priority, listener);
+    }
+
+    /** Removes an owned fallback listener. The direct path stays disabled because the owned chain is no longer intact. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void unregisterIncomingDamageInternal(IncomingDamage listener) {
+        TRACKED_INCOMING_DAMAGE.unregisterInternal(listener);
+    }
+
+    /**
+     * Returns whether Fabric may dispatch the fixed owned slots. This is one volatile mode read: a runtime
+     * external registration publishes fallback mode before it mutates the delegate, and the last external
+     * unregister publishes direct mode only after the delegate and its published invoker are restored. An
+     * explicit clear or removal of an owned listener permanently disables direct mode for this event instance.
+     */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean incomingDamageDirectAllowed() {
+        return TRACKED_INCOMING_DAMAGE.directAllowed();
+    }
+
+    /**
      * Fired after vanilla has applied armor and magic reductions but before it consumes absorption or changes
      * health. This mirrors NeoForge's mutable {@code LivingDamageEvent.Pre}.
+     * <p>
+     * Fabric's owned path dispatches the small set of built-in consumers directly and uses this event as a
+     * compatibility fallback whenever an external listener is present. Keep the event tracked so a damage
+     * invocation can snapshot that mode once at its head.
      */
-    public static final Event<LivingDamagePre> LIVING_DAMAGE_PRE = EventFactory.createLoop();
+    private static final TrackedEvent<LivingDamagePre> TRACKED_LIVING_DAMAGE_PRE = new TrackedEvent<>(
+        EventFactory.createLoop());
+
+    public static final Event<LivingDamagePre> LIVING_DAMAGE_PRE = TRACKED_LIVING_DAMAGE_PRE;
 
     @FunctionalInterface
     public interface LivingDamagePre {
@@ -1230,8 +1120,15 @@ public class PlaceboEvents {
     /**
      * Fired after vanilla has consumed absorption and applied the remaining damage to health. This mirrors the
      * values consumed by NeoForge's {@code LivingDamageEvent.Post}.
+     * <p>
+     * Fabric's owned path dispatches the small set of built-in consumers directly and uses this event as a
+     * compatibility fallback whenever an external listener is present. Keep the event tracked so a damage
+     * invocation can snapshot that mode once at its head.
      */
-    public static final Event<LivingDamagePost> LIVING_DAMAGE_POST = EventFactory.createLoop();
+    private static final TrackedEvent<LivingDamagePost> TRACKED_LIVING_DAMAGE_POST = new TrackedEvent<>(
+        EventFactory.createLoop());
+
+    public static final Event<LivingDamagePost> LIVING_DAMAGE_POST = TRACKED_LIVING_DAMAGE_POST;
 
     @FunctionalInterface
     public interface LivingDamagePost {
@@ -1246,13 +1143,24 @@ public class PlaceboEvents {
         private final float originalDamage;
         private final float inflictedDamage;
         private final float healthDamage;
+        private final float preDamageHealth;
 
         public LivingDamagePostContext(LivingEntity entity, DamageSource source, float originalDamage, float inflictedDamage, float healthDamage) {
+            this(entity, source, originalDamage, inflictedDamage, healthDamage, Float.NaN);
+        }
+
+        /**
+         * Creates a context with the health observed immediately before this hit. The five-argument constructor
+         * remains the public compatibility shape used by NeoForge and older callers; its extra value is absent.
+         */
+        public LivingDamagePostContext(LivingEntity entity, DamageSource source, float originalDamage, float inflictedDamage,
+            float healthDamage, float preDamageHealth) {
             this.entity = entity;
             this.source = source;
             this.originalDamage = originalDamage;
             this.inflictedDamage = inflictedDamage;
             this.healthDamage = healthDamage;
+            this.preDamageHealth = preDamageHealth;
         }
 
         public LivingEntity getEntity() {
@@ -1276,11 +1184,55 @@ public class PlaceboEvents {
         public float getHealthDamage() {
             return this.healthDamage;
         }
+
+        /**
+         * Health immediately before this hit, when supplied by the Fabric fallback bridge. Returns {@link Float#NaN}
+         * for contexts created with the legacy five-argument constructor.
+         */
+        public float getPreDamageHealth() {
+            return this.preDamageHealth;
+        }
     }
 
     /** Fires {@link #LIVING_DAMAGE_POST}. */
     public static void fireLivingDamagePost(LivingDamagePostContext ctx) {
         LIVING_DAMAGE_POST.invoker().damage(ctx);
+    }
+
+    /** Registers a loader-owned PRE compatibility listener without disabling Fabric's direct path. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void registerLivingDamagePreInternal(EventPriority priority, LivingDamagePre listener) {
+        TRACKED_LIVING_DAMAGE_PRE.registerInternal(priority, listener);
+    }
+
+    /** Removes a loader-owned PRE compatibility listener; direct dispatch remains disabled thereafter. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void unregisterLivingDamagePreInternal(LivingDamagePre listener) {
+        TRACKED_LIVING_DAMAGE_PRE.unregisterInternal(listener);
+    }
+
+    /** Returns whether a Fabric hit may use the fixed PRE slots. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean livingDamagePreDirectAllowed() {
+        return TRACKED_LIVING_DAMAGE_PRE.directAllowed();
+    }
+
+    /** Registers a loader-owned POST compatibility listener without disabling Fabric's direct path. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void registerLivingDamagePostInternal(EventPriority priority, LivingDamagePost listener) {
+        TRACKED_LIVING_DAMAGE_POST.registerInternal(priority, listener);
+    }
+
+    /** Removes a loader-owned POST compatibility listener; direct dispatch remains disabled thereafter. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static void unregisterLivingDamagePostInternal(LivingDamagePost listener) {
+        TRACKED_LIVING_DAMAGE_POST.unregisterInternal(listener);
+    }
+
+    /** Returns whether a Fabric hit may use the fixed POST slots. */
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static boolean livingDamagePostDirectAllowed() {
+        return TRACKED_LIVING_DAMAGE_POST.directAllowed();
     }
 
     /**
@@ -1352,6 +1304,182 @@ public class PlaceboEvents {
     /** Fires {@link #ENTITY_TELEPORT}; a false result means the caller must skip the teleport. */
     public static boolean fireEntityTeleport(EntityTeleportContext ctx) {
         return !ENTITY_TELEPORT.invoker().teleport(ctx).isFalse();
+    }
+
+    /**
+     * Small wrapper used by the Fabric direct-dispatch bridges for registration bookkeeping. It delegates
+     * ordering to Architectury and publishes volatile invoker/count snapshots after every successful delegate
+     * mutation. The registration list is touched only while listeners are added or removed, never from a
+     * direct Fabric hot path. Package visibility is intentional so common tests can exercise publication
+     * ordering without adding a production-only test hook to the event API.
+     */
+    static final class TrackedEvent<T> implements Event<T> {
+
+        private enum DispatchMode {
+            DIRECT,
+            FALLBACK,
+            FALLBACK_DISABLED
+        }
+
+        private final Event<T> delegate;
+        private final ArrayList<Registration<T>> registrations = new ArrayList<>();
+        private volatile DispatchMode mode = DispatchMode.DIRECT;
+        private volatile T publishedInvoker;
+        /** Count published with the same monitor boundary as the delegate invoker and dispatch mode. */
+        private volatile int publishedListenerCount;
+        /** Public-listener count used to decide whether a direct bridge must fall back to the public event. */
+        private volatile int publishedExternalCount;
+        private int externalCount;
+        private int internalCount;
+        private boolean internalChainIntact = true;
+
+        TrackedEvent(Event<T> delegate) {
+            this.delegate = Objects.requireNonNull(delegate);
+        }
+
+        @Override
+        public T invoker() {
+            T current = this.publishedInvoker;
+            if (current == null) {
+                synchronized (this) {
+                    current = this.publishedInvoker;
+                    if (current == null) {
+                        current = Objects.requireNonNull(this.delegate.invoker(), "delegate invoker");
+                        this.publishedInvoker = current;
+                    }
+                }
+            }
+            return current;
+        }
+
+        @Override
+        public synchronized void register(T listener) {
+            this.register(EventPriority.NORMAL, listener);
+        }
+
+        @Override
+        public synchronized void register(EventPriority priority, T listener) {
+            this.add(priority, listener, false);
+        }
+
+        synchronized void registerInternal(EventPriority priority, T listener) {
+            this.add(priority, listener, true);
+        }
+
+        private void add(EventPriority priority, T listener, boolean internal) {
+            Objects.requireNonNull(priority, "priority");
+            Objects.requireNonNull(listener, "listener");
+
+            DispatchMode previousMode = this.mode;
+            // Publish fallback before touching the delegate. A dispatch racing this registration can therefore
+            // never select the fixed direct slots after the delegate starts to change.
+            if (!internal && previousMode == DispatchMode.DIRECT) {
+                this.mode = DispatchMode.FALLBACK;
+            }
+            try {
+                this.delegate.register(priority, listener);
+            }
+            catch (RuntimeException | Error failure) {
+                // No bookkeeping was published, so restore the old mode if this registration was the first
+                // external listener. Existing fallback/disabled modes remain unchanged.
+                if (!internal && previousMode == DispatchMode.DIRECT) {
+                    this.mode = previousMode;
+                }
+                throw failure;
+            }
+
+            this.publishDelegateInvoker();
+            this.registrations.add(new Registration<>(listener, internal));
+            if (internal) this.internalCount++;
+            else this.externalCount++;
+            this.publishedListenerCount = this.registrations.size();
+            this.publishedExternalCount = this.externalCount;
+        }
+
+        @Override
+        public synchronized void unregister(T listener) {
+            Registration<T> removed = null;
+            for (Registration<T> registration : this.registrations) {
+                if (Objects.equals(registration.listener(), listener)) {
+                    removed = registration;
+                    break;
+                }
+            }
+
+            if (removed != null && removed.internal()) {
+                // Removing an owned adapter makes the direct slots incomplete. Publish this before the
+                // delegate mutation so a racing damage call cannot use the incomplete direct chain.
+                this.internalChainIntact = false;
+                this.mode = DispatchMode.FALLBACK_DISABLED;
+            }
+
+            this.delegate.unregister(listener);
+            this.publishDelegateInvoker();
+            if (removed == null) return;
+
+            this.registrations.remove(removed);
+            if (removed.internal()) {
+                this.internalCount--;
+                this.publishedListenerCount = this.registrations.size();
+                return;
+            }
+
+            this.externalCount--;
+            this.publishedListenerCount = this.registrations.size();
+            this.publishedExternalCount = this.externalCount;
+            if (this.externalCount == 0 && this.mode == DispatchMode.FALLBACK && this.internalChainIntact) {
+                // The public delegate and its invoker snapshot are complete before direct mode is visible.
+                this.mode = DispatchMode.DIRECT;
+            }
+        }
+
+        synchronized void unregisterInternal(T listener) {
+            this.unregister(listener);
+        }
+
+        @Override
+        public synchronized boolean isRegistered(T listener) {
+            return this.delegate.isRegistered(listener);
+        }
+
+        @Override
+        public synchronized void clearListeners() {
+            // clearListeners() is public API and must not silently restore owned direct behavior. Publish the
+            // sticky disabled state before clearing the delegate; later internal or external registrations are
+            // visible through the public event but can never re-enable direct dispatch.
+            this.internalChainIntact = false;
+            this.mode = DispatchMode.FALLBACK_DISABLED;
+            this.delegate.clearListeners();
+            this.publishDelegateInvoker();
+            this.registrations.clear();
+            this.externalCount = 0;
+            this.internalCount = 0;
+            this.publishedListenerCount = 0;
+            this.publishedExternalCount = 0;
+        }
+
+        boolean directAllowed() {
+            DispatchMode current = this.mode;
+            return current == DispatchMode.DIRECT;
+        }
+
+        boolean hasListeners() {
+            return this.publishedListenerCount != 0;
+        }
+
+        boolean hasExternalListeners() {
+            return this.publishedExternalCount != 0;
+        }
+
+        int listenerCount() {
+            return this.publishedListenerCount;
+        }
+
+        private void publishDelegateInvoker() {
+            this.publishedInvoker = Objects.requireNonNull(this.delegate.invoker(), "delegate invoker");
+        }
+
+        private record Registration<T>(T listener, boolean internal) {}
     }
 
 }
